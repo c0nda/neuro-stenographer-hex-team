@@ -197,12 +197,15 @@ dependencies {
     implementation(libs.onnxruntime.android)
     implementation(libs.jtransforms)
 
-    // sherpa-onnx is not published to Maven Central for Android; the official
+    // sherpa-onnx is not published to Maven Central for Android. The official
     // prebuilt AAR (static-link-onnxruntime variant, SHA-256
     // 07e042d97f3a6bd5b7fe74d4eef0513dc01a714b16c15a903250095aba43a575)
     // from https://github.com/k2-fsa/sherpa-onnx/releases (v2.0.1, Apache-2.0)
-    // is vendored. See docs/PHASE4B_DIARIZATION.md.
-    implementation(files("libs/sherpa-onnx-2.0.1.aar"))
+    // is vendored in the in-project repository at <root>/local-repo (see
+    // settings.gradle.kts) and consumed as a normal coordinate. A plain
+    // files("*.aar") dependency hits the AGP "Null extracted folder" bug in
+    // Android Studio. See docs/PHASE4B_DIARIZATION.md.
+    implementation("com.k2-fsa:sherpa-onnx:2.0.1")
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
