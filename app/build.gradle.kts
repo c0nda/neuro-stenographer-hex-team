@@ -75,6 +75,14 @@ ksp {
     arg("room.generateKotlin", "true")
 }
 
+// Forward the desktop verification harness properties (-Dgigaam.*) into the
+// unit-test JVM; Gradle does not propagate arbitrary -D system properties.
+tasks.withType<Test>().configureEach {
+    listOf("gigaam.model", "gigaam.clip", "gigaam.reference").forEach { key ->
+        providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
+    }
+}
+
 // Bundled model provisioning (Phase 1 sanctioned "Gradle download task"
 // path): the four model artifacts are fetched at BUILD time from their
 // official sources, verified against the same size+SHA-256 constants the
@@ -213,6 +221,11 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Desktop ONNX Runtime for the JVM-only verification harness
+    // (GigaamDesktopWerTest): runs the exact production ASR engine on a PC
+    // against real audio to measure WER without an Android device. Same
+    // ai.onnxruntime API as onnxruntime-android; never packaged into the APK.
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.28.0")
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
