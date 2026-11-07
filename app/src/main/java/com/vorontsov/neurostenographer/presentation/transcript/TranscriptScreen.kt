@@ -219,7 +219,7 @@ fun TranscriptScreen(
                     item(key = "empty") {
                         EmptyState(
                             title = stringResource(R.string.transcript_empty_title),
-                            body = stringResource(R.string.transcript_empty_body),
+                            body = ""
                         )
                     }
                 } else {
@@ -293,18 +293,8 @@ private fun TranscriptionCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = stringResource(R.string.transcript_recognition),
-                style = MaterialTheme.typography.titleSmall,
-            )
-
             when {
                 modelFailed -> {
-                    Text(
-                        text = stringResource(R.string.transcript_model_required),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
                     val message = modelStatus.message
                     if (!message.isNullOrBlank()) {
                         Text(
@@ -413,12 +403,6 @@ private fun TranscriptionCard(
                     }
                 }
             }
-
-            Text(
-                text = stringResource(R.string.transcript_asr_note),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,8 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -44,13 +45,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vorontsov.neurostenographer.R
 import com.vorontsov.neurostenographer.domain.model.CaptureStatus
-import com.vorontsov.neurostenographer.domain.model.ModelState
-import com.vorontsov.neurostenographer.domain.model.ModelStatus
 import com.vorontsov.neurostenographer.presentation.common.EmptyState
 import com.vorontsov.neurostenographer.presentation.common.RecordingRow
-import com.vorontsov.neurostenographer.presentation.common.formatBytes
 import com.vorontsov.neurostenographer.presentation.common.formatClock
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,7 +63,6 @@ fun HomeScreen(
     val modelStatus by viewModel.modelStatus.collectAsStateWithLifecycle()
     val vadModelStatus by viewModel.vadModelStatus.collectAsStateWithLifecycle()
     val diarizationModelStatus by viewModel.diarizationModelStatus.collectAsStateWithLifecycle()
-    val appSettings by viewModel.settings.collectAsStateWithLifecycle()
 
     val resources = LocalResources.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -75,30 +71,6 @@ fun HomeScreen(
         contract = ActivityResultContracts.GetContent(),
     ) { uri ->
         if (uri != null) viewModel.import(uri)
-    }
-
-    val modelLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri != null) viewModel.importModel(uri)
-    }
-
-    val vadModelLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri != null) viewModel.importVadModel(uri)
-    }
-
-    val segmentationLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri != null) viewModel.importDiarizationSegmentationModel(uri)
-    }
-
-    val embeddingLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri != null) viewModel.importDiarizationEmbeddingModel(uri)
     }
 
     val importing = importState is ImportUiState.Importing
@@ -160,15 +132,7 @@ fun HomeScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
-                actions = {
-                    IconButton(onClick = onOpenHistory) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.List,
-                            contentDescription = stringResource(R.string.home_history),
-                        )
-                    }
-                },
+                title = { Text(stringResource(R.string.app_name)) }
             )
         },
     ) { innerPadding ->
@@ -179,21 +143,6 @@ fun HomeScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = stringResource(R.string.home_subtitle),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = stringResource(R.string.home_offline_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
@@ -218,42 +167,21 @@ fun HomeScreen(
                 }
             }
 
-            item {
-                ModelCard(
-                    title = stringResource(R.string.home_model_title),
-                    status = modelStatus,
-                    verificationNote = stringResource(R.string.home_model_verification_note),
-                    notInstalledNote = stringResource(R.string.home_model_not_installed),
-                    onImport = { modelLauncher.launch(arrayOf("*/*")) },
-                )
-            }
+           if (!(modelStatus.isReady && vadModelStatus.isReady && diarizationModelStatus.isReady)) {
+               item {
+                   Row(
+                       modifier = Modifier.fillMaxWidth(),
+                       verticalAlignment = Alignment.CenterVertically
+                   ) {
+                       CircularProgressIndicator(modifier = Modifier.size(20.dp))
 
-            item {
-                ModelCard(
-                    title = stringResource(R.string.home_vad_model_title),
-                    status = vadModelStatus,
-                    verificationNote = stringResource(R.string.home_vad_model_verification_note),
-                    notInstalledNote = stringResource(R.string.home_vad_model_not_installed),
-                    onImport = { vadModelLauncher.launch(arrayOf("*/*")) },
-                )
-            }
+                       Spacer(Modifier.width(8.dp))
 
-            item {
-                DiarizationModelCard(
-                    status = diarizationModelStatus,
-                    onImportSegmentation = { segmentationLauncher.launch(arrayOf("*/*")) },
-                    onImportEmbedding = { embeddingLauncher.launch(arrayOf("*/*")) },
-                )
-            }
+                       Text(text = "Подготовка моделей...")
+                   }
 
-            item {
-                TuningCard(
-                    settings = appSettings,
-                    onThreshold = viewModel::setDiarizationThreshold,
-                    onMinOff = viewModel::setDiarizationMinOffMs,
-                    onMaxPause = viewModel::setAsrMaxPauseMs,
-                )
-            }
+               }
+           }
 
             if (importing) {
                 item {
@@ -338,242 +266,3 @@ fun HomeScreen(
 }
 
 private const val RECENT_LIMIT = 5
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TuningCard(
-    settings: com.vorontsov.neurostenographer.domain.model.AppSettings,
-    onThreshold: (Float) -> Unit,
-    onMinOff: (Long) -> Unit,
-    onMaxPause: (Long) -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.home_tuning_title),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            TuningRow(
-                label = stringResource(R.string.home_tuning_threshold),
-                hint = stringResource(R.string.home_tuning_threshold_hint),
-                choices = com.vorontsov.neurostenographer.domain.model.AppSettings.DIARIZATION_THRESHOLD_CHOICES.map {
-                    it.toString() to { onThreshold(it) }
-                },
-                selected = settings.diarizationThreshold.toString(),
-            )
-            TuningRow(
-                label = stringResource(R.string.home_tuning_min_off),
-                hint = stringResource(R.string.home_tuning_min_off_hint),
-                choices = com.vorontsov.neurostenographer.domain.model.AppSettings.DIARIZATION_MIN_OFF_CHOICES_MS.map {
-                    "${it} ms" to { onMinOff(it) }
-                },
-                selected = "${settings.diarizationMinOffMs} ms",
-            )
-            TuningRow(
-                label = stringResource(R.string.home_tuning_max_pause),
-                hint = stringResource(R.string.home_tuning_max_pause_hint),
-                choices = com.vorontsov.neurostenographer.domain.model.AppSettings.ASR_MAX_PAUSE_CHOICES_MS.map {
-                    "${it} ms" to { onMaxPause(it) }
-                },
-                selected = "${settings.asrMaxPauseMs} ms",
-            )
-            Text(
-                text = stringResource(R.string.home_tuning_hint),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TuningRow(
-    label: String,
-    hint: String,
-    choices: List<Pair<String, () -> Unit>>,
-    selected: String,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            choices.forEach { (caption, action) ->
-                FilterChip(
-                    selected = caption == selected,
-                    onClick = action,
-                    label = { Text(caption) },
-                )
-            }
-        }
-        Text(
-            text = hint,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun DiarizationModelCard(
-    status: ModelStatus,
-    onImportSegmentation: () -> Unit,
-    onImportEmbedding: () -> Unit,
-) {
-    val hasError = status.state == ModelState.INVALID || status.state == ModelState.ERROR
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.home_diarization_title),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Text(
-                text = when (status.state) {
-                    ModelState.NOT_INSTALLED -> status.message
-                        ?: stringResource(R.string.home_diarization_not_installed)
-
-                    ModelState.VERIFYING -> stringResource(R.string.home_model_verifying)
-                    ModelState.IMPORTING -> stringResource(
-                        R.string.home_model_importing,
-                        (status.progress * 100).roundToInt(),
-                    )
-
-                    ModelState.READY -> stringResource(
-                        R.string.home_model_ready,
-                        formatBytes(status.sizeBytes ?: 0L),
-                    )
-
-                    ModelState.INVALID -> status.message
-                        ?: stringResource(R.string.home_model_invalid)
-
-                    ModelState.ERROR -> status.message
-                        ?: stringResource(R.string.home_model_error)
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = if (hasError) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-            if (status.isBusy) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onImportSegmentation) {
-                        Text(
-                            stringResource(
-                                if (status.isReady) {
-                                    R.string.home_model_replace
-                                } else {
-                                    R.string.home_diarization_import_segmentation
-                                },
-                            ),
-                        )
-                    }
-                    OutlinedButton(onClick = onImportEmbedding) {
-                        Text(
-                            stringResource(
-                                if (status.isReady) {
-                                    R.string.home_model_replace
-                                } else {
-                                    R.string.home_diarization_import_embedding
-                                },
-                            ),
-                        )
-                    }
-                }
-            }
-            Text(
-                text = stringResource(R.string.home_diarization_verification_note),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModelCard(
-    title: String,
-    status: ModelStatus,
-    verificationNote: String,
-    notInstalledNote: String,
-    onImport: () -> Unit,
-) {
-    val hasError = status.state == ModelState.INVALID || status.state == ModelState.ERROR
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Text(
-                text = when (status.state) {
-                    ModelState.NOT_INSTALLED -> notInstalledNote
-                    ModelState.VERIFYING -> stringResource(R.string.home_model_verifying)
-                    ModelState.IMPORTING -> stringResource(
-                        R.string.home_model_importing,
-                        (status.progress * 100).roundToInt(),
-                    )
-
-                    ModelState.READY -> stringResource(
-                        R.string.home_model_ready,
-                        formatBytes(status.sizeBytes ?: 0L),
-                    )
-
-                    ModelState.INVALID -> status.message
-                        ?: stringResource(R.string.home_model_invalid)
-
-                    ModelState.ERROR -> status.message
-                        ?: stringResource(R.string.home_model_error)
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = if (hasError) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-            if (status.isBusy) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            } else {
-                OutlinedButton(onClick = onImport) {
-                    Text(
-                        stringResource(
-                            if (status.isReady) {
-                                R.string.home_model_replace
-                            } else {
-                                R.string.home_model_import
-                            },
-                        ),
-                    )
-                }
-            }
-            Text(
-                text = verificationNote,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}

@@ -171,32 +171,6 @@ fun RecordingScreen(
                 onDismissError = viewModel::dismissError,
                 errorMessage = state.errorMessage,
             )
-
-            if (hasPermission && state.status == CaptureStatus.IDLE) {
-                Text(
-                    text = stringResource(R.string.recording_ready_body),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            LiveTranscriptCard(
-                available = viewModel.liveTranscriptionAvailable || liveSegments.isNotEmpty(),
-                segments = liveSegments,
-                processingBacklog = (streamingState as? com.vorontsov.neurostenographer.domain.realtime.StreamingState.Processing)?.backlog ?: 0,
-            )
-            CurrentSpeakerCard(
-                available = viewModel.liveTranscriptionAvailable,
-                currentSpeaker = currentSpeaker,
-            )
-
-            if (hasPermission) {
-                Text(
-                    text = stringResource(R.string.recording_mic_ready),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                )
-            }
         }
     }
 }
@@ -254,13 +228,6 @@ private fun TimerCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(72.dp),
-            )
-
-            Text(
-                text = stringResource(R.string.recording_background_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
             )
         }
     }
@@ -410,102 +377,6 @@ private fun Controls(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun LiveTranscriptCard(
-    available: Boolean,
-    segments: List<com.vorontsov.neurostenographer.domain.realtime.StreamingTranscriptSegment>,
-    processingBacklog: Int,
-) {
-    SectionCard(
-        title = stringResource(R.string.recording_live_transcript),
-        body = when {
-            !available -> stringResource(R.string.recording_live_unavailable)
-            segments.isEmpty() -> stringResource(R.string.recording_live_waiting)
-            else -> ""
-        },
-    )
-    if (available && segments.isNotEmpty()) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                segments.takeLast(LIVE_SEGMENTS_SHOWN).forEach { segment ->
-                    Column {
-                        Text(
-                            text = stringResource(
-                                R.string.recording_live_segment_time,
-                                formatTimestamp(segment.startMs),
-                                formatTimestamp(segment.endMs),
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = segment.text,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                }
-                if (processingBacklog > 0) {
-                    Text(
-                        text = stringResource(R.string.recording_live_catching_up, processingBacklog),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.recording_live_provisional_note),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CurrentSpeakerCard(
-    available: Boolean,
-    currentSpeaker: String?,
-) {
-    SectionCard(
-        title = stringResource(R.string.recording_current_speaker),
-        body = when {
-            !available -> stringResource(R.string.recording_live_unavailable)
-            currentSpeaker == null -> stringResource(R.string.recording_current_speaker_placeholder)
-            else -> currentSpeaker
-        },
-    )
-}
-
-private const val LIVE_SEGMENTS_SHOWN = 5
-
-@Composable
-private fun SectionCard(title: String, body: String) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = body,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
