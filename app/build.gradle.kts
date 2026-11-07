@@ -35,9 +35,29 @@ android {
     buildFeatures {
         compose = true
     }
+    androidResources {
+        // The bundled ONNX model is already compressed to INT8. Re-deflating a
+        // 214 MB binary slows every build and install for almost no size gain,
+        // so keep it stored and stream it directly into private storage.
+        noCompress.add("onnx")
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
+
+// The weights are git-ignored because of their size. Warn loudly if a build
+// would produce an APK without the bundled recognizer.
+tasks.named("preBuild") {
+    val modelAsset = file("src/main/assets/models/gigaam-v3/v3_ctc.int8.onnx")
+    doFirst {
+        if (!modelAsset.isFile) {
+            logger.warn(
+                "WARNING: $modelAsset is missing. " +
+                    "This APK will not contain GigaAM v3 and users must import the model manually.",
+            )
         }
     }
 }

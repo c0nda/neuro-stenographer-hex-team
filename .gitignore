@@ -79,6 +79,9 @@ fastlane/readme.md
 # Version control
 vcs.xml
 
+# Bundled ASR weights are too large for version control; see NOTICE.txt.
+app/src/main/assets/models/**/*.onnx
+
 # lint
 lint/intermediates/
 lint/generated/

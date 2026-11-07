@@ -1,0 +1,19 @@
+Bundled speech recognition model
+===============================
+
+File:   v3_ctc.int8.onnx
+Size:   224,721,181 bytes
+SHA-256 ceb61454e2e1a2dec5872cbac1de0fe0a4271d1148f6b26b5bda53ff30a12acd
+
+Source:
+  GigaAM v3 by ai-sage — https://huggingface.co/ai-sage/GigaAM-v3
+  ONNX export by istupakov — https://huggingface.co/istupakov/gigaam-v3-onnx
+
+GigaAM v3 is distributed under the MIT license. The ONNX export is a
+redistribution of the same weights; keep the upstream license and attribution
+when shipping this APK. This file is not downloaded by the app at runtime and
+the application declares no INTERNET permission.
+
+The binary is intentionally git-ignored because of its size. Builds made
+without it produce an APK without bundled recognition and fall back to manual
+model import.

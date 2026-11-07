@@ -60,8 +60,8 @@ class HomeViewModel @Inject constructor(
     val modelEvents: SharedFlow<ModelEvent> = _modelEvents.asSharedFlow()
 
     init {
-        // Hash the installed file once per process before enabling transcription.
-        viewModelScope.launch { modelRepository.refresh() }
+        // Verify an installed model, or install the build-bundled asset once.
+        viewModelScope.launch { modelRepository.ensureProvisioned() }
     }
 
     fun import(uri: Uri) {

@@ -112,6 +112,13 @@ interface AsrModelRepository {
     suspend fun refresh()
 
     /**
+     * Makes a recognizer available without user interaction: verifies an already
+     * installed file, or installs the build-bundled asset when one is present.
+     * Builds without a bundled asset simply report `NOT_INSTALLED`.
+     */
+    suspend fun ensureProvisioned()
+
+    /**
      * Streams a user-selected model into private storage, verifying its size and
      * SHA-256 before it becomes visible. [open] is invoked on a background
      * thread and must return a fresh stream.

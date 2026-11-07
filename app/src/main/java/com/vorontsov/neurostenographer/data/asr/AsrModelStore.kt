@@ -21,12 +21,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Owns the manually provisioned GigaAM v3 INT8 model.
+ * Owns the GigaAM v3 INT8 model.
  *
- * The app has no INTERNET permission and never downloads the model. The user
- * selects a local file; it is streamed to private storage and accepted only if
- * both the byte size and SHA-256 match the published artifact. A corrupt or
- * truncated file is never loaded.
+ * The app has no INTERNET permission and never downloads the model. When the
+ * build contains the bundled asset, it is copied into private storage and
+ * verified on first launch; otherwise the user selects a local file. Both paths
+ * accept the file only if the byte size and SHA-256 match the published
+ * artifact. A corrupt or truncated file is never loaded.
  *
  * Expected artifact (`istupakov/gigaam-v3-onnx`):
  *  - name: v3_ctc.int8.onnx
@@ -35,7 +36,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class AsrModelStore @Inject constructor(
-    @ApplicationContext context: Context,
+    @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : AsrModelRepository {
 
@@ -46,7 +47,9 @@ class AsrModelStore @Inject constructor(
     override val status: StateFlow<AsrModelStatus> = _status.asStateFlow()
 
     private val gate = Mutex()
+    private val provisionGate = Mutex()
     private var verifiedStamp: Pair<Long, Long>? = null
+    private var bundledProvisionAttempted = false
 
     /** Returns the model file only when its content has been verified this session. */
     fun verifiedModelFile(): File? {
@@ -79,6 +82,22 @@ class AsrModelStore @Inject constructor(
             }
             if (status.isReady) verifiedStamp = stamp
             _status.value = status
+        }
+    }
+
+    override suspend fun ensureProvisioned() = withContext(ioDispatcher) {
+        provisionGate.withLock {
+            if (_status.value.isBusy) return@withLock
+            if (modelFile.isFile) {
+                refresh()
+                return@withLock
+            }
+            if (!hasBundledAsset() || bundledProvisionAttempted) {
+                refresh()
+                return@withLock
+            }
+            bundledProvisionAttempted = true
+            importModel { context.assets.open(BUNDLED_MODEL_ASSET) }
         }
     }
 
@@ -178,6 +197,9 @@ class AsrModelStore @Inject constructor(
         }
     }
 
+    private fun hasBundledAsset(): Boolean =
+        context.assets.list(MODEL_DIRECTORY)?.contains(MODEL_FILE_NAME) == true
+
     private fun verify(file: File): AsrModelStatus {
         val size = file.length()
         if (size != EXPECTED_SIZE) {
@@ -221,6 +243,7 @@ class AsrModelStore @Inject constructor(
     private companion object {
         const val MODEL_DIRECTORY = "models/gigaam-v3"
         const val MODEL_FILE_NAME = "v3_ctc.int8.onnx"
+        const val BUNDLED_MODEL_ASSET = "$MODEL_DIRECTORY/$MODEL_FILE_NAME"
         const val EXPECTED_SIZE = 224_721_181L
         const val EXPECTED_SHA256 =
             "ceb61454e2e1a2dec5872cbac1de0fe0a4271d1148f6b26b5bda53ff30a12acd"

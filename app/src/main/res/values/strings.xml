@@ -14,15 +14,15 @@
     <string name="home_import_failed">Import failed: %1$s</string>
     <string name="home_offline_note">No audio ever leaves this device.</string>
     <string name="home_model_title">Speech recognition model</string>
-    <string name="home_model_not_installed">The GigaAM v3 INT8 model is not installed. Import it once; all recognition stays on this device.</string>
+    <string name="home_model_not_installed">This build has no bundled recognizer. Import v3_ctc.int8.onnx once; all recognition stays on this device.</string>
     <string name="home_model_verifying">Verifying the installed model…</string>
-    <string name="home_model_importing">Importing and verifying the model… %1$d%%</string>
+    <string name="home_model_importing">Preparing the model on this device… %1$d%%</string>
     <string name="home_model_ready">Ready · %1$s · size and SHA-256 verified</string>
     <string name="home_model_invalid">The model file is invalid.</string>
     <string name="home_model_error">The model could not be verified.</string>
     <string name="home_model_import">Import model file</string>
     <string name="home_model_replace">Replace model file</string>
-    <string name="home_model_verification_note">Only v3_ctc.int8.onnx (224,721,181 bytes) is accepted. The app never downloads it.</string>
+    <string name="home_model_verification_note">Only v3_ctc.int8.onnx (224,721,181 bytes) is accepted. The verified model ships in the APK; the app never downloads it.</string>
     <string name="home_model_imported">Model imported and verified</string>
     <string name="home_model_import_failed">Model import failed: %1$s</string>
 
@@ -76,8 +76,8 @@
     <string name="transcript_recognition">On-device recognition</string>
     <string name="transcript_transcribe">Transcribe</string>
     <string name="transcript_retranscribe">Transcribe again</string>
-    <string name="transcript_model_required">Import the GigaAM v3 model on the Home screen to transcribe this recording.</string>
-    <string name="transcript_model_required_short">The speech recognition model is not installed</string>
+    <string name="transcript_model_required">The GigaAM v3 model is still being prepared. Open Home and wait for Ready, or import the model file there.</string>
+    <string name="transcript_model_required_short">The speech recognition model is not ready yet</string>
     <string name="transcript_model_checking">Checking the installed model…</string>
     <string name="transcript_transcription_busy">Another transcription is already running</string>
     <string name="transcript_transcription_progress">%1$d%%</string>
@@ -116,7 +116,7 @@
     <string name="history_reprocess">Reprocess</string>
     <string name="history_reprocess_started">Transcription started</string>
     <string name="history_reprocess_busy">Another transcription is already running</string>
-    <string name="history_reprocess_unavailable">Import the GigaAM v3 model on the Home screen before reprocessing.</string>
+    <string name="history_reprocess_unavailable">Wait for the model to become Ready on Home, or import it there before reprocessing.</string>
     <string name="history_empty_search">No recordings match your search.</string>
     <string name="history_empty_title">No recordings yet</string>
     <string name="history_empty_body">Your recordings and transcripts will appear here.</string>
