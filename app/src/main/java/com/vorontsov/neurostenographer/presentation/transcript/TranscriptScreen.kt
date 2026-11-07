@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -22,6 +24,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
@@ -49,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -58,12 +63,13 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vorontsov.neurostenographer.R
 import com.vorontsov.neurostenographer.data.transcription.TranscriptionState
-import com.vorontsov.neurostenographer.domain.asr.AsrModelState
-import com.vorontsov.neurostenographer.domain.asr.AsrModelStatus
 import com.vorontsov.neurostenographer.domain.model.AlignmentSource
+import com.vorontsov.neurostenographer.domain.model.ModelState
+import com.vorontsov.neurostenographer.domain.model.ModelStatus
 import com.vorontsov.neurostenographer.domain.model.PlaybackState
 import com.vorontsov.neurostenographer.domain.model.Speaker
 import com.vorontsov.neurostenographer.domain.model.TranscriptSegment
+import com.vorontsov.neurostenographer.domain.model.WordTimestamp
 import com.vorontsov.neurostenographer.domain.transcription.TranscriptionStage
 import com.vorontsov.neurostenographer.presentation.common.EmptyState
 import com.vorontsov.neurostenographer.presentation.common.formatClock
@@ -84,6 +90,7 @@ fun TranscriptScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val transcription by viewModel.transcription.collectAsStateWithLifecycle()
     val modelStatus by viewModel.modelStatus.collectAsStateWithLifecycle()
+    var expandedSegmentKey by remember { mutableStateOf<Long?>(null) }
     val resources = LocalResources.current
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -242,10 +249,20 @@ fun TranscriptScreen(
                         items = uiState.segments,
                         key = { segment -> segment.id ?: "${segment.startMs}-${segment.endMs}" },
                     ) { segment ->
+                        val segmentKey = segment.id ?: -1L
                         SegmentCard(
                             segment = segment,
                             speakers = uiState.speakers,
+                            expanded = expandedSegmentKey == segmentKey,
+                            playbackPositionMs = uiState.playback.positionMs,
                             onClick = { viewModel.playFromSegment(segment) },
+                            onToggleWords = {
+                                expandedSegmentKey =
+                                    if (expandedSegmentKey == segmentKey) null else segmentKey
+                            },
+                            onSeekToWord = { wordStartMs ->
+                                viewModel.seekTo(wordStartMs, play = true)
+                            },
                         )
                     }
                 }
@@ -256,16 +273,16 @@ fun TranscriptScreen(
 
 @Composable
 private fun TranscriptionCard(
-    modelStatus: AsrModelStatus,
+    modelStatus: ModelStatus,
     state: TranscriptionState,
     hasSegments: Boolean,
     onTranscribe: () -> Unit,
     onCancel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val modelFailed = modelStatus.state == AsrModelState.INVALID ||
-        modelStatus.state == AsrModelState.ERROR ||
-        modelStatus.state == AsrModelState.NOT_INSTALLED
+    val modelFailed = modelStatus.state == ModelState.INVALID ||
+        modelStatus.state == ModelState.ERROR ||
+        modelStatus.state == ModelState.NOT_INSTALLED
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -409,7 +426,9 @@ private fun TranscriptionCard(
 @Composable
 private fun stageLabel(stage: TranscriptionStage): String = when (stage) {
     TranscriptionStage.PREPARING -> stringResource(R.string.transcript_stage_preparing)
+    TranscriptionStage.DETECTING_SPEECH -> stringResource(R.string.transcript_stage_detecting_speech)
     TranscriptionStage.RECOGNIZING -> stringResource(R.string.transcript_stage_recognizing)
+    TranscriptionStage.DIARIZING -> stringResource(R.string.transcript_stage_diarizing)
     TranscriptionStage.SAVING -> stringResource(R.string.transcript_stage_saving)
 }
 
@@ -496,11 +515,16 @@ private fun PlaybackCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SegmentCard(
     segment: TranscriptSegment,
     speakers: List<Speaker>,
+    expanded: Boolean,
+    playbackPositionMs: Long,
     onClick: () -> Unit,
+    onToggleWords: () -> Unit,
+    onSeekToWord: (Long) -> Unit,
 ) {
     val accent = speakerColor(segment.speakerId)
     Surface(
@@ -569,8 +593,70 @@ private fun SegmentCard(
                         )
                     }
                 }
+                if (segment.words.isNotEmpty()) {
+                    TextButton(onClick = onToggleWords) {
+                        Text(
+                            text = stringResource(
+                                if (expanded) {
+                                    R.string.transcript_hide_words
+                                } else {
+                                    R.string.transcript_show_words
+                                },
+                            ),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Icon(
+                            imageVector = if (expanded) {
+                                Icons.Default.KeyboardArrowUp
+                            } else {
+                                Icons.Default.KeyboardArrowDown
+                            },
+                            contentDescription = null,
+                        )
+                    }
+                }
+                if (expanded && segment.words.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        segment.words.forEach { word ->
+                            WordChip(
+                                word = word,
+                                active = playbackPositionMs in word.startMs until word.endMs,
+                                accent = accent,
+                                onClick = { onSeekToWord(word.startMs) },
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun WordChip(
+    word: WordTimestamp,
+    active: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Text(
+            text = word.text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (active) accent else MaterialTheme.colorScheme.onSurface,
+            fontWeight = if (active) FontWeight.Bold else null,
+        )
+        Text(
+            text = formatTimestamp(word.startMs),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

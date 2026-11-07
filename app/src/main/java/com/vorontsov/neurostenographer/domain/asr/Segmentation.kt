@@ -34,15 +34,24 @@ class ChunkPlanner(
         require(energyFrameMs in 10..100)
     }
 
-    fun plan(source: AudioSource): List<SampleRange> {
-        val total = source.totalSamples
-        if (total <= 0) return emptyList()
+    fun plan(source: AudioSource): List<SampleRange> =
+        planRange(source, SampleRange(0, source.totalSamples))
+
+    /**
+     * Plans chunk boundaries inside a single [range] instead of the whole
+     * source. Used to split one long VAD speech region without crossing its
+     * edges. Package-visible: this is an implementation detail of the VAD
+     * planner, not part of the public planning API.
+     */
+    internal fun planRange(source: AudioSource, range: SampleRange): List<SampleRange> {
+        val total = range.endSampleExclusive
         val rate = source.sampleRate.toLong()
+        if (total <= range.startSample || range.startSample < 0) return emptyList()
         val minSamples = rate * minChunkMs / 1000
         val maxSamples = rate * maxChunkMs / 1000
         val result = mutableListOf<SampleRange>()
 
-        var start = 0L
+        var start = range.startSample
         while (start < total) {
             val remaining = total - start
             if (remaining <= maxSamples) {

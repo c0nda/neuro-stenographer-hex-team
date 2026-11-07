@@ -8,7 +8,10 @@ import com.vorontsov.neurostenographer.domain.asr.AsrEngineFactory
 import com.vorontsov.neurostenographer.domain.asr.AsrModelRepository
 import com.vorontsov.neurostenographer.domain.asr.AudioSourceFactory
 import com.vorontsov.neurostenographer.domain.asr.ChunkPlanner
+import com.vorontsov.neurostenographer.domain.diarization.DiarizationEngineFactory
 import com.vorontsov.neurostenographer.domain.transcription.TranscribeRecordingUseCase
+import com.vorontsov.neurostenographer.domain.vad.VadEngineFactory
+import com.vorontsov.neurostenographer.domain.vad.VadSpeechPlanner
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -51,6 +54,9 @@ object AsrModule {
         engineFactory: AsrEngineFactory,
         audioSourceFactory: AudioSourceFactory,
         chunkPlanner: ChunkPlanner,
+        vadEngineFactory: VadEngineFactory,
+        vadSpeechPlanner: VadSpeechPlanner,
+        diarizationEngineFactory: DiarizationEngineFactory,
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
         @DefaultDispatcher cpuDispatcher: CoroutineDispatcher,
     ): TranscribeRecordingUseCase = TranscribeRecordingUseCase(
@@ -59,6 +65,9 @@ object AsrModule {
         engineFactory = engineFactory,
         audioSourceFactory = audioSourceFactory,
         chunkPlanner = chunkPlanner,
+        vadEngineFactory = vadEngineFactory,
+        vadSpeechPlanner = vadSpeechPlanner,
+        diarizationEngineFactory = diarizationEngineFactory,
         ioDispatcher = ioDispatcher,
         cpuDispatcher = cpuDispatcher,
     )

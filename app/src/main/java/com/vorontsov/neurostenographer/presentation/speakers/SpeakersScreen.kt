@@ -61,12 +61,15 @@ fun SpeakersScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var editingSpeaker by remember { mutableStateOf<Speaker?>(null) }
+    var mergingSpeaker by remember { mutableStateOf<Speaker?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             val message = when (event) {
                 SpeakerEvent.Renamed -> R.string.speakers_renamed
                 SpeakerEvent.RenameFailed -> R.string.speakers_rename_failed
+                SpeakerEvent.Merged -> R.string.speakers_merged
+                SpeakerEvent.MergeFailed -> R.string.speakers_merge_failed
             }
             snackbarHostState.showSnackbar(resources.getString(message))
         }
@@ -117,6 +120,7 @@ fun SpeakersScreen(
                     SpeakerRow(
                         speaker = speaker,
                         onRename = { editingSpeaker = speaker },
+                        onMerge = { mergingSpeaker = speaker },
                     )
                 }
             }
@@ -142,12 +146,62 @@ fun SpeakersScreen(
             },
         )
     }
+
+    val speakerBeingMerged = mergingSpeaker
+    if (speakerBeingMerged != null) {
+        MergeSpeakerDialog(
+            source = speakerBeingMerged,
+            targets = speakers.filter { it.id != speakerBeingMerged.id },
+            onDismiss = { mergingSpeaker = null },
+            onMergeInto = { target ->
+                viewModel.merge(speakerBeingMerged.id, target.id)
+                mergingSpeaker = null
+            },
+        )
+    }
+}
+
+@Composable
+private fun MergeSpeakerDialog(
+    source: Speaker,
+    targets: List<Speaker>,
+    onDismiss: () -> Unit,
+    onMergeInto: (Speaker) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(R.string.speakers_merge_title, source.speakerKey))
+        },
+        text = {
+            if (targets.isEmpty()) {
+                Text(stringResource(R.string.speakers_merge))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    targets.forEach { target ->
+                        TextButton(onClick = { onMergeInto(target) }) {
+                            Text(
+                                target.displayName?.takeIf { it.isNotBlank() }
+                                    ?: target.speakerKey,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.speakers_cancel))
+            }
+        },
+    )
 }
 
 @Composable
 private fun SpeakerRow(
     speaker: Speaker,
     onRename: () -> Unit,
+    onMerge: () -> Unit,
 ) {
     val accent = speakerColor(speaker.speakerKey)
     Surface(
@@ -177,6 +231,12 @@ private fun SpeakerRow(
                     text = speaker.speakerKey,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onMerge) {
+                Text(
+                    text = stringResource(R.string.speakers_merge),
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
             IconButton(onClick = onRename) {

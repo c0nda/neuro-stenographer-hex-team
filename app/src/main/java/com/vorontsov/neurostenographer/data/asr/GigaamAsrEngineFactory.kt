@@ -43,4 +43,9 @@ class GigaamAsrEngineFactory @Inject constructor(
         engine = loaded
         return loaded
     }
+
+    override suspend fun release() = gate.withLock {
+        engine?.close()
+        engine = null
+    }
 }

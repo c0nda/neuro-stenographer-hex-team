@@ -6,8 +6,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vorontsov.neurostenographer.data.audio.AudioImporter
 import com.vorontsov.neurostenographer.data.audio.RecordingSessionManager
+import com.vorontsov.neurostenographer.data.file.BundledModelProvisioner
+import com.vorontsov.neurostenographer.di.VadModel
 import com.vorontsov.neurostenographer.domain.asr.AsrModelRepository
-import com.vorontsov.neurostenographer.domain.asr.AsrModelStatus
+import com.vorontsov.neurostenographer.domain.diarization.DiarizationModelRepository
+import com.vorontsov.neurostenographer.domain.model.ModelRepository
+import com.vorontsov.neurostenographer.domain.model.ModelStatus
 import com.vorontsov.neurostenographer.domain.model.Recording
 import com.vorontsov.neurostenographer.domain.model.RecordingSessionState
 import com.vorontsov.neurostenographer.domain.repository.RecordingRepository
@@ -34,6 +38,11 @@ sealed interface ImportUiState {
 sealed interface ModelEvent {
     data object Imported : ModelEvent
     data class ImportFailed(val message: String) : ModelEvent
+    data object VadImported : ModelEvent
+    data class VadImportFailed(val message: String) : ModelEvent
+    data object DiarizationSegmentationImported : ModelEvent
+    data object DiarizationEmbeddingImported : ModelEvent
+    data class DiarizationImportFailed(val message: String) : ModelEvent
 }
 
 @HiltViewModel
@@ -42,6 +51,9 @@ class HomeViewModel @Inject constructor(
     private val audioImporter: AudioImporter,
     recordingSessionManager: RecordingSessionManager,
     private val modelRepository: AsrModelRepository,
+    @VadModel private val vadModelRepository: ModelRepository,
+    private val diarizationModelRepository: DiarizationModelRepository,
+    private val bundledModelProvisioner: BundledModelProvisioner,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -51,7 +63,11 @@ class HomeViewModel @Inject constructor(
 
     val session: StateFlow<RecordingSessionState> = recordingSessionManager.state
 
-    val modelStatus: StateFlow<AsrModelStatus> = modelRepository.status
+    val modelStatus: StateFlow<ModelStatus> = modelRepository.status
+
+    val vadModelStatus: StateFlow<ModelStatus> = vadModelRepository.status
+
+    val diarizationModelStatus: StateFlow<ModelStatus> = diarizationModelRepository.status
 
     private val _importState = MutableStateFlow<ImportUiState>(ImportUiState.Idle)
     val importState: StateFlow<ImportUiState> = _importState.asStateFlow()
@@ -60,8 +76,14 @@ class HomeViewModel @Inject constructor(
     val modelEvents: SharedFlow<ModelEvent> = _modelEvents.asSharedFlow()
 
     init {
-        // Hash the installed file once per process before enabling transcription.
-        viewModelScope.launch { modelRepository.refresh() }
+        // Install bundled models if the APK shipped them, then verify the
+        // installed files once per process before enabling transcription.
+        viewModelScope.launch {
+            bundledModelProvisioner.provisionBundledModels()
+            modelRepository.refresh()
+            vadModelRepository.refresh()
+            diarizationModelRepository.refresh()
+        }
     }
 
     fun import(uri: Uri) {
@@ -90,6 +112,61 @@ class HomeViewModel @Inject constructor(
                 .onFailure { throwable ->
                     _modelEvents.emit(
                         ModelEvent.ImportFailed(
+                            throwable.message ?: "The selected model file was rejected",
+                        ),
+                    )
+                }
+        }
+    }
+
+    fun importVadModel(uri: Uri) {
+        if (vadModelStatus.value.isBusy) return
+        viewModelScope.launch {
+            val result = vadModelRepository.importModel {
+                context.contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("The selected file could not be opened")
+            }
+            result
+                .onSuccess { _modelEvents.emit(ModelEvent.VadImported) }
+                .onFailure { throwable ->
+                    _modelEvents.emit(
+                        ModelEvent.VadImportFailed(
+                            throwable.message ?: "The selected model file was rejected",
+                        ),
+                    )
+                }
+        }
+    }
+
+    fun importDiarizationSegmentationModel(uri: Uri) {
+        if (diarizationModelStatus.value.isBusy) return
+        viewModelScope.launch {
+            diarizationModelRepository.importSegmentationModel {
+                context.contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("The selected file could not be opened")
+            }
+                .onSuccess { _modelEvents.emit(ModelEvent.DiarizationSegmentationImported) }
+                .onFailure { throwable ->
+                    _modelEvents.emit(
+                        ModelEvent.DiarizationImportFailed(
+                            throwable.message ?: "The selected model file was rejected",
+                        ),
+                    )
+                }
+        }
+    }
+
+    fun importDiarizationEmbeddingModel(uri: Uri) {
+        if (diarizationModelStatus.value.isBusy) return
+        viewModelScope.launch {
+            diarizationModelRepository.importEmbeddingModel {
+                context.contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("The selected file could not be opened")
+            }
+                .onSuccess { _modelEvents.emit(ModelEvent.DiarizationEmbeddingImported) }
+                .onFailure { throwable ->
+                    _modelEvents.emit(
+                        ModelEvent.DiarizationImportFailed(
                             throwable.message ?: "The selected model file was rejected",
                         ),
                     )

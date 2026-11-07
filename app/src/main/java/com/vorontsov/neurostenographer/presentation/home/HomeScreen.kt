@@ -42,9 +42,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vorontsov.neurostenographer.R
-import com.vorontsov.neurostenographer.domain.asr.AsrModelState
-import com.vorontsov.neurostenographer.domain.asr.AsrModelStatus
 import com.vorontsov.neurostenographer.domain.model.CaptureStatus
+import com.vorontsov.neurostenographer.domain.model.ModelState
+import com.vorontsov.neurostenographer.domain.model.ModelStatus
 import com.vorontsov.neurostenographer.presentation.common.EmptyState
 import com.vorontsov.neurostenographer.presentation.common.RecordingRow
 import com.vorontsov.neurostenographer.presentation.common.formatBytes
@@ -63,6 +63,8 @@ fun HomeScreen(
     val session by viewModel.session.collectAsStateWithLifecycle()
     val importState by viewModel.importState.collectAsStateWithLifecycle()
     val modelStatus by viewModel.modelStatus.collectAsStateWithLifecycle()
+    val vadModelStatus by viewModel.vadModelStatus.collectAsStateWithLifecycle()
+    val diarizationModelStatus by viewModel.diarizationModelStatus.collectAsStateWithLifecycle()
 
     val resources = LocalResources.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -79,6 +81,24 @@ fun HomeScreen(
         if (uri != null) viewModel.importModel(uri)
     }
 
+    val vadModelLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) viewModel.importVadModel(uri)
+    }
+
+    val segmentationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) viewModel.importDiarizationSegmentationModel(uri)
+    }
+
+    val embeddingLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) viewModel.importDiarizationEmbeddingModel(uri)
+    }
+
     val importing = importState is ImportUiState.Importing
     val recordingActive = session.status == CaptureStatus.RECORDING ||
         session.status == CaptureStatus.PAUSED ||
@@ -90,6 +110,25 @@ fun HomeScreen(
                 ModelEvent.Imported -> resources.getString(R.string.home_model_imported)
                 is ModelEvent.ImportFailed -> resources.getString(
                     R.string.home_model_import_failed,
+                    event.message,
+                )
+
+                ModelEvent.VadImported -> resources.getString(R.string.home_vad_model_imported)
+                is ModelEvent.VadImportFailed -> resources.getString(
+                    R.string.home_vad_model_import_failed,
+                    event.message,
+                )
+
+                ModelEvent.DiarizationSegmentationImported -> resources.getString(
+                    R.string.home_diarization_segmentation_imported,
+                )
+
+                ModelEvent.DiarizationEmbeddingImported -> resources.getString(
+                    R.string.home_diarization_embedding_imported,
+                )
+
+                is ModelEvent.DiarizationImportFailed -> resources.getString(
+                    R.string.home_diarization_import_failed,
                     event.message,
                 )
             }
@@ -179,8 +218,29 @@ fun HomeScreen(
 
             item {
                 ModelCard(
+                    title = stringResource(R.string.home_model_title),
                     status = modelStatus,
+                    verificationNote = stringResource(R.string.home_model_verification_note),
+                    notInstalledNote = stringResource(R.string.home_model_not_installed),
                     onImport = { modelLauncher.launch(arrayOf("*/*")) },
+                )
+            }
+
+            item {
+                ModelCard(
+                    title = stringResource(R.string.home_vad_model_title),
+                    status = vadModelStatus,
+                    verificationNote = stringResource(R.string.home_vad_model_verification_note),
+                    notInstalledNote = stringResource(R.string.home_vad_model_not_installed),
+                    onImport = { vadModelLauncher.launch(arrayOf("*/*")) },
+                )
+            }
+
+            item {
+                DiarizationModelCard(
+                    status = diarizationModelStatus,
+                    onImportSegmentation = { segmentationLauncher.launch(arrayOf("*/*")) },
+                    onImportEmbedding = { embeddingLauncher.launch(arrayOf("*/*")) },
                 )
             }
 
@@ -269,11 +329,12 @@ fun HomeScreen(
 private const val RECENT_LIMIT = 5
 
 @Composable
-private fun ModelCard(
-    status: AsrModelStatus,
-    onImport: () -> Unit,
+private fun DiarizationModelCard(
+    status: ModelStatus,
+    onImportSegmentation: () -> Unit,
+    onImportEmbedding: () -> Unit,
 ) {
-    val hasError = status.state == AsrModelState.INVALID || status.state == AsrModelState.ERROR
+    val hasError = status.state == ModelState.INVALID || status.state == ModelState.ERROR
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -284,27 +345,115 @@ private fun ModelCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = stringResource(R.string.home_model_title),
+                text = stringResource(R.string.home_diarization_title),
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
                 text = when (status.state) {
-                    AsrModelState.NOT_INSTALLED -> stringResource(R.string.home_model_not_installed)
-                    AsrModelState.VERIFYING -> stringResource(R.string.home_model_verifying)
-                    AsrModelState.IMPORTING -> stringResource(
+                    ModelState.NOT_INSTALLED -> status.message
+                        ?: stringResource(R.string.home_diarization_not_installed)
+
+                    ModelState.VERIFYING -> stringResource(R.string.home_model_verifying)
+                    ModelState.IMPORTING -> stringResource(
                         R.string.home_model_importing,
                         (status.progress * 100).roundToInt(),
                     )
 
-                    AsrModelState.READY -> stringResource(
+                    ModelState.READY -> stringResource(
                         R.string.home_model_ready,
                         formatBytes(status.sizeBytes ?: 0L),
                     )
 
-                    AsrModelState.INVALID -> status.message
+                    ModelState.INVALID -> status.message
                         ?: stringResource(R.string.home_model_invalid)
 
-                    AsrModelState.ERROR -> status.message
+                    ModelState.ERROR -> status.message
+                        ?: stringResource(R.string.home_model_error)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (hasError) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            if (status.isBusy) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onImportSegmentation) {
+                        Text(
+                            stringResource(
+                                if (status.isReady) {
+                                    R.string.home_model_replace
+                                } else {
+                                    R.string.home_diarization_import_segmentation
+                                },
+                            ),
+                        )
+                    }
+                    OutlinedButton(onClick = onImportEmbedding) {
+                        Text(
+                            stringResource(
+                                if (status.isReady) {
+                                    R.string.home_model_replace
+                                } else {
+                                    R.string.home_diarization_import_embedding
+                                },
+                            ),
+                        )
+                    }
+                }
+            }
+            Text(
+                text = stringResource(R.string.home_diarization_verification_note),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ModelCard(
+    title: String,
+    status: ModelStatus,
+    verificationNote: String,
+    notInstalledNote: String,
+    onImport: () -> Unit,
+) {
+    val hasError = status.state == ModelState.INVALID || status.state == ModelState.ERROR
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = when (status.state) {
+                    ModelState.NOT_INSTALLED -> notInstalledNote
+                    ModelState.VERIFYING -> stringResource(R.string.home_model_verifying)
+                    ModelState.IMPORTING -> stringResource(
+                        R.string.home_model_importing,
+                        (status.progress * 100).roundToInt(),
+                    )
+
+                    ModelState.READY -> stringResource(
+                        R.string.home_model_ready,
+                        formatBytes(status.sizeBytes ?: 0L),
+                    )
+
+                    ModelState.INVALID -> status.message
+                        ?: stringResource(R.string.home_model_invalid)
+
+                    ModelState.ERROR -> status.message
                         ?: stringResource(R.string.home_model_error)
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -330,7 +479,7 @@ private fun ModelCard(
                 }
             }
             Text(
-                text = stringResource(R.string.home_model_verification_note),
+                text = verificationNote,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

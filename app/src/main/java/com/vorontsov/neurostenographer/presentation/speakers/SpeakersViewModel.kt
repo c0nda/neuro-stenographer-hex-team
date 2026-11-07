@@ -21,6 +21,8 @@ import javax.inject.Inject
 sealed interface SpeakerEvent {
     data object Renamed : SpeakerEvent
     data object RenameFailed : SpeakerEvent
+    data object Merged : SpeakerEvent
+    data object MergeFailed : SpeakerEvent
 }
 
 @HiltViewModel
@@ -50,6 +52,18 @@ class SpeakersViewModel @Inject constructor(
             runCatching { speakerRepository.renameSpeaker(speakerId, displayName) }
                 .onSuccess { _events.emit(SpeakerEvent.Renamed) }
                 .onFailure { _events.emit(SpeakerEvent.RenameFailed) }
+        }
+    }
+
+    /** Reassigns all segments of [sourceSpeakerId] to [targetSpeakerId]. */
+    fun merge(sourceSpeakerId: Long, targetSpeakerId: Long) {
+        if (sourceSpeakerId == targetSpeakerId) return
+        viewModelScope.launch {
+            runCatching {
+                speakerRepository.mergeSpeakers(recordingId, sourceSpeakerId, targetSpeakerId)
+            }
+                .onSuccess { _events.emit(SpeakerEvent.Merged) }
+                .onFailure { _events.emit(SpeakerEvent.MergeFailed) }
         }
     }
 }

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vorontsov.neurostenographer.data.audio.RecordingSessionManager
 import com.vorontsov.neurostenographer.domain.model.RecordingSessionState
+import com.vorontsov.neurostenographer.domain.realtime.StreamingTranscriber
 import com.vorontsov.neurostenographer.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -21,11 +22,18 @@ import javax.inject.Inject
 @HiltViewModel
 class RecordingViewModel @Inject constructor(
     private val sessionManager: RecordingSessionManager,
+    private val streamingTranscriber: StreamingTranscriber,
     settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     val state: StateFlow<RecordingSessionState> = sessionManager.state
     val finishedRecording: SharedFlow<Long> = sessionManager.finishedRecording
+
+    /** Provisional live transcript; empty when live recognition is unavailable. */
+    val liveSegments = streamingTranscriber.segments
+    val streamingState = streamingTranscriber.state
+    val currentSpeaker = streamingTranscriber.currentSpeaker
+    val liveTranscriptionAvailable: Boolean get() = streamingTranscriber.isActive
 
     val keepScreenOn: StateFlow<Boolean> = settingsRepository.settings
         .map { it.keepScreenOnWhileRecording }
@@ -39,7 +47,13 @@ class RecordingViewModel @Inject constructor(
 
     fun start() {
         viewModelScope.launch {
+            val started = streamingTranscriber.start()
+            sessionManager.setPcmBlockListener(
+                if (started) streamingTranscriber::onPcm else null,
+            )
             sessionManager.start().onFailure { throwable ->
+                sessionManager.setPcmBlockListener(null)
+                if (started) streamingTranscriber.stopAndFlush()
                 _startError.value = throwable.message ?: "Could not start recording"
             }
         }
@@ -58,6 +72,11 @@ class RecordingViewModel @Inject constructor(
             sessionManager.stop().onFailure { throwable ->
                 _messages.emit(throwable.message ?: "Could not finish the recording")
             }
+            // Flush the real-time pipeline after capture ends; provisional
+            // segments stay in memory, the offline pass produces the final
+            // transcript.
+            sessionManager.setPcmBlockListener(null)
+            streamingTranscriber.stopAndFlush()
         }
     }
 
