@@ -139,6 +139,14 @@ class TranscribeRecordingUseCase(
                 var turns: List<DiarizationTurn> = emptyList()
                 val diarizationFactory = diarizationEngineFactory
                     ?.takeIf { it.isAvailable() }
+                if (diarizationEngineFactory != null && diarizationFactory == null) {
+                    Log.w(
+                        TAG,
+                        "Diarization models not installed/bundled; every speaker " +
+                            "will be \"unknown\" (import or bundle segmentation + " +
+                            "embedding models)",
+                    )
+                }
                 if (diarizationFactory != null) {
                     // Sequential heavy-model lifecycle: release the 225 MB ASR
                     // session BEFORE the diarization models load into memory.
@@ -311,15 +319,34 @@ class TranscribeRecordingUseCase(
     private suspend fun restorePunctuation(
         assigned: List<WordSpeakerAssigner.AssignedWord>,
     ): List<WordSpeakerAssigner.AssignedWord> {
-        val restorer = punctuationRestorer?.takeIf { it.isAvailable } ?: return assigned
+        val restorer = punctuationRestorer
+        if (restorer == null) {
+            Log.w(TAG, "Punctuation restorer not wired; skipping punctuation restoration")
+            return assigned
+        }
+        if (!restorer.isAvailable) {
+            // The most common cause is an APK built without the bundled
+            // model asset (downloadBundledModels skipped/failed) — say so
+            // loudly instead of degrading silently.
+            Log.w(
+                TAG,
+                "Punctuation model assets not bundled in the APK; " +
+                    "skipping punctuation restoration (build must run the " +
+                    "downloadBundledModels task with network access once)",
+            )
+            return assigned
+        }
         val restored = ArrayList<WordSpeakerAssigner.AssignedWord>(assigned.size)
         var index = 0
+        var groupCount = 0
+        val startMs = System.nanoTime()
         while (index < assigned.size) {
             coroutineContext.ensureActive()
             val speaker = assigned[index].speakerId
             var end = index
             while (end < assigned.size && assigned[end].speakerId == speaker) end++
             val group = assigned.subList(index, end).map { it.word }
+            groupCount++
             val withMarks = try {
                 restorer.restore(group)
             } catch (throwable: Throwable) {
@@ -334,6 +361,12 @@ class TranscribeRecordingUseCase(
             }
             index = end
         }
+        val elapsedMs = (System.nanoTime() - startMs) / 1_000_000
+        Log.d(
+            TAG,
+            "punctuation restored: words=${assigned.size} speakerGroups=$groupCount " +
+                "elapsedMs=$elapsedMs",
+        )
         return PunctuationPostProcessor.capitalizeSentenceStarts(restored.map { it.word })
             .mapIndexed { wordIndex, word -> WordSpeakerAssigner.AssignedWord(word, restored[wordIndex].speakerId) }
     }
