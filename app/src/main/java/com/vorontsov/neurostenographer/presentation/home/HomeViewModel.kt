@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vorontsov.neurostenographer.data.audio.AudioImporter
 import com.vorontsov.neurostenographer.data.audio.RecordingSessionManager
+import com.vorontsov.neurostenographer.data.file.BundledModelProvisioner
 import com.vorontsov.neurostenographer.di.VadModel
 import com.vorontsov.neurostenographer.domain.asr.AsrModelRepository
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationModelRepository
@@ -52,6 +53,7 @@ class HomeViewModel @Inject constructor(
     private val modelRepository: AsrModelRepository,
     @VadModel private val vadModelRepository: ModelRepository,
     private val diarizationModelRepository: DiarizationModelRepository,
+    private val bundledModelProvisioner: BundledModelProvisioner,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -74,8 +76,10 @@ class HomeViewModel @Inject constructor(
     val modelEvents: SharedFlow<ModelEvent> = _modelEvents.asSharedFlow()
 
     init {
-        // Verify the installed files once per process before enabling transcription.
+        // Install bundled models if the APK shipped them, then verify the
+        // installed files once per process before enabling transcription.
         viewModelScope.launch {
+            bundledModelProvisioner.provisionBundledModels()
             modelRepository.refresh()
             vadModelRepository.refresh()
             diarizationModelRepository.refresh()

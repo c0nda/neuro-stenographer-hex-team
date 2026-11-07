@@ -44,9 +44,14 @@ Threading: audio reads on the IO dispatcher, inference on a CPU dispatcher, one 
 
 ---
 
-## 3. Model provisioning (fully offline)
+## 3. Model provisioning (fully offline at runtime)
 
-The app has **no INTERNET permission** and never downloads the model. The user picks `v3_ctc.int8.onnx` (published artifact `istupakov/gigaam-v3-onnx`) via the system file picker on the Home screen; the store streams it into `files/models/gigaam-v3/` and accepts it only when both the byte size and the SHA-256 match:
+The app has **no INTERNET permission** and never downloads models at runtime. There are two provisioning paths, both enforcing the same size+SHA-256 verification:
+
+1. **Bundled (default):** the `downloadBundledModels` Gradle task fetches all four model artifacts at BUILD time from their official sources, verifies each against the pinned size and SHA-256, and packages them into `assets/models/`. On the first launch, `BundledModelProvisioner` streams them from assets into private storage through the same verified import path. The artifacts are gitignored — no model binaries are committed to the repository. Skip bundling with `-PskipBundledModels`. Build-time download requires network once; runtime stays offline.
+2. **Manual:** the user picks each file via the system file picker on the Home screen; the store streams it into `files/models/...` and accepts it only when both the byte size and the SHA-256 match. This remains available for replacing or deleting models.
+
+For the ASR model the expected artifact (`istupakov/gigaam-v3-onnx`) is:
 
 - size: `224 721 181` bytes
 - sha256: `ceb61454e2e1a2dec5872cbac1de0fe0a4271d1148f6b26b5bda53ff30a12acd`

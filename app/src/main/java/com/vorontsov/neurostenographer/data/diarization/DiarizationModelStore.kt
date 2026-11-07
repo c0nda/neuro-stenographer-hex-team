@@ -61,6 +61,11 @@ class DiarizationModelStore @Inject constructor(
 
     fun verifiedEmbeddingFile(): File? = embeddingStore.verifiedModelFile()
 
+    /** Per-file readiness (the combined [status] is READY only when both are). */
+    fun isSegmentationReady(): Boolean = segmentationStore.status.value.isReady
+
+    fun isEmbeddingReady(): Boolean = embeddingStore.status.value.isReady
+
     override suspend fun refresh() {
         segmentationStore.refresh()
         embeddingStore.refresh()
