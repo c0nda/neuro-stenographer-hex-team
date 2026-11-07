@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -65,6 +66,7 @@ fun HomeScreen(
     val modelStatus by viewModel.modelStatus.collectAsStateWithLifecycle()
     val vadModelStatus by viewModel.vadModelStatus.collectAsStateWithLifecycle()
     val diarizationModelStatus by viewModel.diarizationModelStatus.collectAsStateWithLifecycle()
+    val appSettings by viewModel.settings.collectAsStateWithLifecycle()
 
     val resources = LocalResources.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -244,6 +246,15 @@ fun HomeScreen(
                 )
             }
 
+            item {
+                TuningCard(
+                    settings = appSettings,
+                    onThreshold = viewModel::setDiarizationThreshold,
+                    onMinOff = viewModel::setDiarizationMinOffMs,
+                    onMaxPause = viewModel::setAsrMaxPauseMs,
+                )
+            }
+
             if (importing) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -327,6 +338,86 @@ fun HomeScreen(
 }
 
 private const val RECENT_LIMIT = 5
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TuningCard(
+    settings: com.vorontsov.neurostenographer.domain.model.AppSettings,
+    onThreshold: (Float) -> Unit,
+    onMinOff: (Long) -> Unit,
+    onMaxPause: (Long) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.home_tuning_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            TuningRow(
+                label = stringResource(R.string.home_tuning_threshold),
+                hint = stringResource(R.string.home_tuning_threshold_hint),
+                choices = com.vorontsov.neurostenographer.domain.model.AppSettings.DIARIZATION_THRESHOLD_CHOICES.map {
+                    it.toString() to { onThreshold(it) }
+                },
+                selected = settings.diarizationThreshold.toString(),
+            )
+            TuningRow(
+                label = stringResource(R.string.home_tuning_min_off),
+                hint = stringResource(R.string.home_tuning_min_off_hint),
+                choices = com.vorontsov.neurostenographer.domain.model.AppSettings.DIARIZATION_MIN_OFF_CHOICES_MS.map {
+                    "${it} ms" to { onMinOff(it) }
+                },
+                selected = "${settings.diarizationMinOffMs} ms",
+            )
+            TuningRow(
+                label = stringResource(R.string.home_tuning_max_pause),
+                hint = stringResource(R.string.home_tuning_max_pause_hint),
+                choices = com.vorontsov.neurostenographer.domain.model.AppSettings.ASR_MAX_PAUSE_CHOICES_MS.map {
+                    "${it} ms" to { onMaxPause(it) }
+                },
+                selected = "${settings.asrMaxPauseMs} ms",
+            )
+            Text(
+                text = stringResource(R.string.home_tuning_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TuningRow(
+    label: String,
+    hint: String,
+    choices: List<Pair<String, () -> Unit>>,
+    selected: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            choices.forEach { (caption, action) ->
+                FilterChip(
+                    selected = caption == selected,
+                    onClick = action,
+                    label = { Text(caption) },
+                )
+            }
+        }
+        Text(
+            text = hint,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
 
 @Composable
 private fun DiarizationModelCard(

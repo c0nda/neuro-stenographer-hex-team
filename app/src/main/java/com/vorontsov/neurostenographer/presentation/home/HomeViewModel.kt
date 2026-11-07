@@ -10,11 +10,13 @@ import com.vorontsov.neurostenographer.data.file.BundledModelProvisioner
 import com.vorontsov.neurostenographer.di.VadModel
 import com.vorontsov.neurostenographer.domain.asr.AsrModelRepository
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationModelRepository
+import com.vorontsov.neurostenographer.domain.model.AppSettings
 import com.vorontsov.neurostenographer.domain.model.ModelRepository
 import com.vorontsov.neurostenographer.domain.model.ModelStatus
 import com.vorontsov.neurostenographer.domain.model.Recording
 import com.vorontsov.neurostenographer.domain.model.RecordingSessionState
 import com.vorontsov.neurostenographer.domain.repository.RecordingRepository
+import com.vorontsov.neurostenographer.domain.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -54,8 +56,24 @@ class HomeViewModel @Inject constructor(
     @VadModel private val vadModelRepository: ModelRepository,
     private val diarizationModelRepository: DiarizationModelRepository,
     private val bundledModelProvisioner: BundledModelProvisioner,
+    private val settingsRepository: SettingsRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
+
+    val settings: StateFlow<AppSettings> = settingsRepository.settings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings())
+
+    fun setDiarizationThreshold(threshold: Float) {
+        viewModelScope.launch { settingsRepository.setDiarizationThreshold(threshold) }
+    }
+
+    fun setDiarizationMinOffMs(minOffMs: Long) {
+        viewModelScope.launch { settingsRepository.setDiarizationMinOffMs(minOffMs) }
+    }
+
+    fun setAsrMaxPauseMs(maxPauseMs: Long) {
+        viewModelScope.launch { settingsRepository.setAsrMaxPauseMs(maxPauseMs) }
+    }
 
     val recordings: StateFlow<List<Recording>> = recordingRepository
         .observeRecordings()

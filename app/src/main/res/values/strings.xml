@@ -38,6 +38,14 @@
     <string name="home_diarization_embedding_imported">Embedding model imported and verified</string>
     <string name="home_diarization_import_failed">Diarization model import failed: %1$s</string>
     <string name="home_diarization_verification_note">Only model.int8.onnx (pyannote segmentation 3.0, 1,540,506 bytes) and 3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx (29,596,978 bytes) are accepted. The app never downloads them.</string>
+    <string name="home_tuning_title">Recognition tuning</string>
+    <string name="home_tuning_hint">Defaults are starting values, not tuned on Russian data yet. Changes apply to the next recognition run; reprocess a recording to compare.</string>
+    <string name="home_tuning_threshold">Speaker separation threshold</string>
+    <string name="home_tuning_threshold_hint">Lower → splits similar voices into more speakers; higher → merges.</string>
+    <string name="home_tuning_min_off">Speaker turn gap</string>
+    <string name="home_tuning_min_off_hint">Turns closer than this are merged into one. Lower → finer alternation.</string>
+    <string name="home_tuning_max_pause">Utterance pause</string>
+    <string name="home_tuning_max_pause_hint">Pauses longer than this start a new segment. Lower → more, shorter segments.</string>
 
     <string name="recording_title">Recording</string>
     <string name="recording_ready">Ready to record</string>

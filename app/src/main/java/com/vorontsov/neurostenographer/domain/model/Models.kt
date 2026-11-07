@@ -75,10 +75,37 @@ data class TranscriptSegment(
     val words: List<WordTimestamp> = emptyList(),
 )
 
+/**
+ * User-tunable recognition parameters. Defaults are conservative starting
+ * values — they are NOT tuned against measured DER on Russian data (Phase 7).
+ * Every value is exposed in the Home "Recognition tuning" card so the right
+ * setting can be found empirically on real recordings.
+ *
+ * - [diarizationThreshold]: sherpa fast-clustering cosine threshold. LOWER
+ *   (0.3) -> more speakers, splits similar voices; HIGHER (0.6-0.7) -> fewer
+ *   speakers, merges one person split across turns.
+ * - [diarizationMinOffMs]: sherpa minDurationOff. Turns separated by less
+ *   than this gap are merged. Lower -> finer alternation between speakers.
+ * - [asrMaxPauseMs]: ASR utterance splitting pause. Pauses longer than this
+ *   start a new transcript segment. Lower -> more, shorter segments.
+ */
 data class AppSettings(
     val processingProfile: ProcessingProfile = ProcessingProfile.BALANCED,
     val keepScreenOnWhileRecording: Boolean = true,
-)
+    val diarizationThreshold: Float = DEFAULT_DIARIZATION_THRESHOLD,
+    val diarizationMinOffMs: Long = DEFAULT_DIARIZATION_MIN_OFF_MS,
+    val asrMaxPauseMs: Long = DEFAULT_ASR_MAX_PAUSE_MS,
+) {
+    companion object {
+        const val DEFAULT_DIARIZATION_THRESHOLD = 0.4f
+        const val DEFAULT_DIARIZATION_MIN_OFF_MS = 500L
+        const val DEFAULT_ASR_MAX_PAUSE_MS = 700L
+
+        val DIARIZATION_THRESHOLD_CHOICES = listOf(0.3f, 0.4f, 0.5f, 0.6f, 0.7f)
+        val DIARIZATION_MIN_OFF_CHOICES_MS = listOf(200L, 500L, 1_000L)
+        val ASR_MAX_PAUSE_CHOICES_MS = listOf(500L, 700L, 1_000L, 1_500L)
+    }
+}
 
 enum class CaptureStatus {
     IDLE,

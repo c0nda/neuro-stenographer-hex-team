@@ -47,4 +47,7 @@ interface SettingsRepository {
     val settings: Flow<AppSettings>
     suspend fun setProcessingProfile(profile: ProcessingProfile)
     suspend fun setKeepScreenOnWhileRecording(enabled: Boolean)
+    suspend fun setDiarizationThreshold(threshold: Float)
+    suspend fun setDiarizationMinOffMs(minOffMs: Long)
+    suspend fun setAsrMaxPauseMs(maxPauseMs: Long)
 }

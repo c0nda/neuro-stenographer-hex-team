@@ -4,10 +4,12 @@ import com.vorontsov.neurostenographer.di.IoDispatcher
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationEngine
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationEngineFactory
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationModelUnavailableException
+import com.vorontsov.neurostenographer.domain.repository.SettingsRepository
 import com.vorontsov.neurostenographer.ml.diarization.SherpaDiarizationEngine
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -21,6 +23,7 @@ import kotlinx.coroutines.withContext
 @Singleton
 class SherpaDiarizationEngineFactory @Inject constructor(
     private val modelStore: DiarizationModelStore,
+    private val settingsRepository: SettingsRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : DiarizationEngineFactory {
 
@@ -41,10 +44,13 @@ class SherpaDiarizationEngineFactory @Inject constructor(
             )
         }
         val loaded = withContext(ioDispatcher) {
+            val tuning = settingsRepository.settings.first()
             SherpaDiarizationEngine.load(
                 segmentationModel = segmentation,
                 embeddingModel = embedding,
                 threads = Runtime.getRuntime().availableProcessors().coerceIn(1, 4),
+                clusterThreshold = tuning.diarizationThreshold,
+                minDurationOffSeconds = tuning.diarizationMinOffMs / 1000f,
             )
         }
         engine = loaded

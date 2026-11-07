@@ -12,10 +12,12 @@ import com.vorontsov.neurostenographer.domain.diarization.DiarizationEngineFacto
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationTurn
 import com.vorontsov.neurostenographer.domain.diarization.SpeakerTurnMerger
 import com.vorontsov.neurostenographer.domain.model.AlignmentSource
+import com.vorontsov.neurostenographer.domain.model.AppSettings
 import com.vorontsov.neurostenographer.domain.model.RecordingStatus
 import com.vorontsov.neurostenographer.domain.model.TranscriptSegment
 import com.vorontsov.neurostenographer.domain.model.WordTimestamp
 import com.vorontsov.neurostenographer.domain.repository.RecordingRepository
+import com.vorontsov.neurostenographer.domain.repository.SettingsRepository
 import com.vorontsov.neurostenographer.domain.repository.TranscriptRepository
 import com.vorontsov.neurostenographer.domain.vad.SpeechRegionMerger
 import com.vorontsov.neurostenographer.domain.vad.VadEngine
@@ -25,6 +27,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
@@ -65,6 +68,7 @@ class TranscribeRecordingUseCase(
     private val diarizationEngineFactory: DiarizationEngineFactory?,
     private val ioDispatcher: CoroutineDispatcher,
     private val cpuDispatcher: CoroutineDispatcher,
+    private val settingsRepository: SettingsRepository? = null,
 ) {
 
     suspend fun execute(
@@ -73,6 +77,10 @@ class TranscribeRecordingUseCase(
     ): TranscriptionOutcome {
         val recording = recordingRepository.getRecording(recordingId)
             ?: throw IllegalArgumentException("Recording $recordingId does not exist")
+
+        // Utterance-splitting pause comes from the user tuning, if wired.
+        val maxPauseMs = settingsRepository?.settings?.first()?.asrMaxPauseMs
+            ?: AppSettings.DEFAULT_ASR_MAX_PAUSE_MS
 
         recordingRepository.updateStatus(recordingId, RecordingStatus.PROCESSING, null)
         try {
@@ -105,7 +113,7 @@ class TranscribeRecordingUseCase(
                     if (words.isNotEmpty()) {
                         wordCount += words.size
                         val offsetMs = range.startSample * 1000L / audio.sampleRate
-                        segments += toSegments(words, offsetMs)
+                        segments += toSegments(words, offsetMs, maxPauseMs)
                     }
                     val fraction = if (ranges.isEmpty()) {
                         0.9f
@@ -242,8 +250,12 @@ class TranscribeRecordingUseCase(
         return withContext(cpuDispatcher) { diarization.diarize(samples, audio.sampleRate) }
     }
 
-    private fun toSegments(words: List<AsrWord>, offsetMs: Long): List<TranscriptSegment> =
-        AsrSegmenter.segment(words).map { utterance ->
+    private fun toSegments(
+        words: List<AsrWord>,
+        offsetMs: Long,
+        maxPauseMs: Long = AppSettings.DEFAULT_ASR_MAX_PAUSE_MS,
+    ): List<TranscriptSegment> =
+        AsrSegmenter.segment(words, maxPauseMs = maxPauseMs).map { utterance ->
             val absoluteWords = utterance.words.map { word ->
                 WordTimestamp(
                     text = word.text,

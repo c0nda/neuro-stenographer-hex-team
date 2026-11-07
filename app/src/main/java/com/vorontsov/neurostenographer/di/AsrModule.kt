@@ -57,6 +57,7 @@ object AsrModule {
         vadEngineFactory: VadEngineFactory,
         vadSpeechPlanner: VadSpeechPlanner,
         diarizationEngineFactory: DiarizationEngineFactory,
+        settingsRepository: com.vorontsov.neurostenographer.domain.repository.SettingsRepository,
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
         @DefaultDispatcher cpuDispatcher: CoroutineDispatcher,
     ): TranscribeRecordingUseCase = TranscribeRecordingUseCase(
@@ -70,6 +71,7 @@ object AsrModule {
         diarizationEngineFactory = diarizationEngineFactory,
         ioDispatcher = ioDispatcher,
         cpuDispatcher = cpuDispatcher,
+        settingsRepository = settingsRepository,
     )
 
     @Provides

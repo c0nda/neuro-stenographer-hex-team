@@ -63,12 +63,18 @@ class SherpaDiarizationEngine private constructor(
     companion object {
         private const val SAMPLE_RATE = 16_000
         private const val CONFIDENCE_UNAVAILABLE = -2f
-        private const val CLUSTER_THRESHOLD = 0.5f
+        private const val DEFAULT_CLUSTER_THRESHOLD = 0.5f
+        private const val DEFAULT_MIN_DURATION_OFF_S = 0.5f
+
+        /** Min pause (ms) between same-speaker turns that still merges them. */
+        const val DEFAULT_MIN_DURATION_OFF_MS = 500L
 
         fun load(
             segmentationModel: File,
             embeddingModel: File,
             threads: Int,
+            clusterThreshold: Float = DEFAULT_CLUSTER_THRESHOLD,
+            minDurationOffSeconds: Float = DEFAULT_MIN_DURATION_OFF_S,
         ): SherpaDiarizationEngine {
             return try {
                 val config = OfflineSpeakerDiarizationConfig(
@@ -84,8 +90,9 @@ class SherpaDiarizationEngine private constructor(
                     ),
                     clustering = FastClusteringConfig(
                         numClusters = -1,
-                        threshold = CLUSTER_THRESHOLD,
+                        threshold = clusterThreshold,
                     ),
+                    minDurationOff = minDurationOffSeconds,
                 )
                 SherpaDiarizationEngine(OfflineSpeakerDiarization(config = config))
             } catch (throwable: Throwable) {

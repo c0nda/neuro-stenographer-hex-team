@@ -10,11 +10,13 @@ import com.vorontsov.neurostenographer.domain.asr.AsrSegmenter
 import com.vorontsov.neurostenographer.domain.asr.AudioSource
 import com.vorontsov.neurostenographer.domain.asr.ChunkPlanner
 import com.vorontsov.neurostenographer.domain.asr.SampleRange
+import com.vorontsov.neurostenographer.domain.model.AppSettings
 import com.vorontsov.neurostenographer.domain.realtime.OnlineSpeakerClusterer
 import com.vorontsov.neurostenographer.domain.realtime.RegionAssembler
 import com.vorontsov.neurostenographer.domain.realtime.StreamingState
 import com.vorontsov.neurostenographer.domain.realtime.StreamingTranscriber
 import com.vorontsov.neurostenographer.domain.realtime.StreamingTranscriptSegment
+import com.vorontsov.neurostenographer.domain.repository.SettingsRepository
 import com.vorontsov.neurostenographer.domain.vad.VadEngine
 import com.vorontsov.neurostenographer.domain.vad.VadEngineFactory
 import com.vorontsov.neurostenographer.ml.diarization.SherpaEmbeddingExtractor
@@ -27,6 +29,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,10 +56,15 @@ class ChunkedStreamingTranscriber @Inject constructor(
     private val asrEngineFactory: AsrEngineFactory,
     private val vadEngineFactory: VadEngineFactory?,
     private val diarizationModelStore: DiarizationModelStore,
+    private val settingsRepository: SettingsRepository,
     private val chunkPlanner: ChunkPlanner,
     @ApplicationScope private val scope: CoroutineScope,
     @DefaultDispatcher private val workerDispatcher: CoroutineDispatcher,
 ) : StreamingTranscriber {
+
+    /** Tuning snapshot taken at start(); refreshed per recording. */
+    @Volatile
+    private var asrMaxPauseMs: Long = AppSettings.DEFAULT_ASR_MAX_PAUSE_MS
 
     private data class RegionJob(
         val regionId: Long,
@@ -65,7 +73,9 @@ class ChunkedStreamingTranscriber @Inject constructor(
     )
 
     private val assembler = RegionAssembler()
-    private val clusterer = OnlineSpeakerClusterer()
+
+    /** Recreated per recording with the user tuning threshold. */
+    private var clusterer = OnlineSpeakerClusterer()
 
     private val _segments = MutableStateFlow<List<StreamingTranscriptSegment>>(emptyList())
     override val segments: StateFlow<List<StreamingTranscriptSegment>> = _segments.asStateFlow()
@@ -104,6 +114,9 @@ class ChunkedStreamingTranscriber @Inject constructor(
         if (!asrEngineFactory.isAvailable()) return false
         return withContext(workerDispatcher) {
             try {
+                val tuning = settingsRepository.settings.first()
+                asrMaxPauseMs = tuning.asrMaxPauseMs
+                clusterer = OnlineSpeakerClusterer(threshold = tuning.diarizationThreshold)
                 asr = asrEngineFactory.getOrCreate()
                 vad = vadEngineFactory?.takeIf { it.isAvailable() }?.getOrCreate()
                 extractor = diarizationModelStore.verifiedEmbeddingFile()
@@ -116,7 +129,6 @@ class ChunkedStreamingTranscriber @Inject constructor(
                 )
                 return@withContext false
             }
-            clusterer.reset()
             assembler.reset()
             nextRegionId = 0L
             droppedRegions = 0
@@ -237,7 +249,7 @@ class ChunkedStreamingTranscriber @Inject constructor(
             return
         }
         val startMs = job.startSample * 1000L / sampleRate
-        val utterances = AsrSegmenter.segment(words)
+        val utterances = AsrSegmenter.segment(words, maxPauseMs = asrMaxPauseMs)
         val text = utterances.joinToString(" ") { it.text }
         val endMs = startMs + (words.last().endMs)
 
