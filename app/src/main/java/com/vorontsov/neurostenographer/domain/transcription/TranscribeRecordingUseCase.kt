@@ -7,10 +7,12 @@ import com.vorontsov.neurostenographer.domain.asr.AudioSource
 import com.vorontsov.neurostenographer.domain.asr.AudioSourceFactory
 import com.vorontsov.neurostenographer.domain.asr.ChunkPlanner
 import com.vorontsov.neurostenographer.domain.asr.SampleRange
+import android.util.Log
+import com.vorontsov.neurostenographer.domain.asr.AsrUtterance
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationEngine
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationEngineFactory
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationTurn
-import com.vorontsov.neurostenographer.domain.diarization.SpeakerTurnMerger
+import com.vorontsov.neurostenographer.domain.diarization.WordSpeakerAssigner
 import com.vorontsov.neurostenographer.domain.model.AlignmentSource
 import com.vorontsov.neurostenographer.domain.model.AppSettings
 import com.vorontsov.neurostenographer.domain.model.RecordingStatus
@@ -99,8 +101,9 @@ class TranscribeRecordingUseCase(
                 }
                 onProgress(0.15f, TranscriptionStage.RECOGNIZING)
 
-                val segments = mutableListOf<TranscriptSegment>()
-                var wordCount = 0
+                // 1-2. ASR per chunk; every word is moved to the GLOBAL
+                // recording timeline here, exactly once.
+                val globalWords = mutableListOf<AsrWord>()
 
                 ranges.forEachIndexed { index, range ->
                     coroutineContext.ensureActive()
@@ -111,9 +114,13 @@ class TranscribeRecordingUseCase(
                         engine.transcribe(samples, audio.sampleRate)
                     }
                     if (words.isNotEmpty()) {
-                        wordCount += words.size
                         val offsetMs = range.startSample * 1000L / audio.sampleRate
-                        segments += toSegments(words, offsetMs, maxPauseMs)
+                        globalWords += words.map { word ->
+                            word.copy(
+                                startMs = word.startMs + offsetMs,
+                                endMs = word.endMs + offsetMs,
+                            )
+                        }
                     }
                     val fraction = if (ranges.isEmpty()) {
                         0.9f
@@ -125,7 +132,8 @@ class TranscribeRecordingUseCase(
 
                 coroutineContext.ensureActive()
 
-                var finalSegments: List<TranscriptSegment> = segments
+                // 3. Full-recording diarization (unchanged models/config).
+                var turns: List<DiarizationTurn> = emptyList()
                 val diarizationFactory = diarizationEngineFactory
                     ?.takeIf { it.isAvailable() }
                 if (diarizationFactory != null) {
@@ -135,16 +143,30 @@ class TranscribeRecordingUseCase(
                     val diarization = diarizationFactory.getOrCreate()
                     try {
                         onProgress(0.9f, TranscriptionStage.DIARIZING)
-                        val turns = diarizeRecording(diarization, audio)
+                        turns = diarizeRecording(diarization, audio)
                         coroutineContext.ensureActive()
-                        finalSegments = SpeakerTurnMerger.assign(
-                            segments = segments,
-                            turns = turns,
-                        )
                     } finally {
                         diarizationFactory.release()
                     }
                 }
+
+                // 4-5. Word-level speaker assignment, then speaker-aware
+                // segmentation: a segment can never mix speakers.
+                val assigned = if (turns.isEmpty()) {
+                    globalWords.map { WordSpeakerAssigner.AssignedWord(it, null) }
+                } else {
+                    WordSpeakerAssigner.assign(globalWords, turns)
+                }
+                val speakerByWord = assigned.associate { it.word to it.speakerId }
+                logAssignment(globalWords, turns, assigned)
+
+                val finalSegments = AsrSegmenter.segment(
+                    assigned.map { it.word },
+                    maxPauseMs = maxPauseMs,
+                    speakerOf = { speakerByWord[it] },
+                ).map { utterance -> toSegment(utterance, speakerByWord[utterance.words.first()]) }
+                logSegments(finalSegments)
+                val wordCount = globalWords.size
 
                 onProgress(0.95f, TranscriptionStage.SAVING)
                 transcriptRepository.replaceSegments(
@@ -153,7 +175,7 @@ class TranscribeRecordingUseCase(
                 )
                 recordingRepository.updateStatus(recordingId, RecordingStatus.READY, null)
                 onProgress(1f, TranscriptionStage.SAVING)
-                return TranscriptionOutcome(segments.size, wordCount)
+                return TranscriptionOutcome(finalSegments.size, wordCount)
             }
         } catch (cancelled: CancellationException) {
             withContext(NonCancellable) {
@@ -213,11 +235,6 @@ class TranscribeRecordingUseCase(
         return vadSpeechPlanner.plan(audio, merged)
     }
 
-    private companion object {
-        const val VAD_BLOCK_SAMPLES = 16_384
-        const val DIARIZATION_BLOCK_SAMPLES = 16_384
-    }
-
     /**
      * Diarization needs the whole recording as one contiguous buffer
      * (pyannote works on global 10 s windows + global clustering).
@@ -250,30 +267,66 @@ class TranscribeRecordingUseCase(
         return withContext(cpuDispatcher) { diarization.diarize(samples, audio.sampleRate) }
     }
 
-    private fun toSegments(
-        words: List<AsrWord>,
-        offsetMs: Long,
-        maxPauseMs: Long = AppSettings.DEFAULT_ASR_MAX_PAUSE_MS,
-    ): List<TranscriptSegment> =
-        AsrSegmenter.segment(words, maxPauseMs = maxPauseMs).map { utterance ->
-            val absoluteWords = utterance.words.map { word ->
+    /**
+     * Words already carry GLOBAL timestamps (the chunk offset was applied
+     * exactly once when collecting them). The utterance is guaranteed
+     * single-speaker by the speaker-aware segmenter.
+     */
+    private fun toSegment(utterance: AsrUtterance, speakerId: String?): TranscriptSegment =
+        TranscriptSegment(
+            id = null,
+            speakerId = speakerId,
+            startMs = utterance.startMs,
+            endMs = utterance.endMs,
+            text = utterance.text,
+            isProvisional = false,
+            alignmentSource = AlignmentSource.CTC_FRAME,
+            words = utterance.words.map { word ->
                 WordTimestamp(
                     text = word.text,
-                    startMs = word.startMs + offsetMs,
-                    endMs = word.endMs + offsetMs,
+                    startMs = word.startMs,
+                    endMs = word.endMs,
                     confidence = word.confidence,
                     alignmentSource = AlignmentSource.CTC_FRAME,
                 )
+            },
+        )
+
+    // Debug diagnostics for the word-level pipeline. Guarded by isLoggable so
+    // production builds stay quiet; Log is used pragmatically here (single
+    // app module) instead of growing a logging abstraction for three lines.
+    private fun logAssignment(
+        words: List<AsrWord>,
+        turns: List<DiarizationTurn>,
+        assigned: List<WordSpeakerAssigner.AssignedWord>,
+    ) {
+        if (!Log.isLoggable(TAG, Log.DEBUG)) return
+        Log.d(TAG, "words=${words.size} diarizationTurns=${turns.size}")
+        if (Log.isLoggable(TAG, Log.VERBOSE)) {
+            assigned.forEachIndexed { index, item ->
+                Log.v(
+                    TAG,
+                    "word[$index] ${item.word.startMs}..${item.word.endMs} " +
+                        "speaker=${item.speakerId ?: "unknown"}: ${item.word.text}",
+                )
             }
-            TranscriptSegment(
-                id = null,
-                speakerId = null,
-                startMs = utterance.startMs + offsetMs,
-                endMs = utterance.endMs + offsetMs,
-                text = utterance.text,
-                isProvisional = false,
-                alignmentSource = AlignmentSource.CTC_FRAME,
-                words = absoluteWords,
+        }
+    }
+
+    private fun logSegments(segments: List<TranscriptSegment>) {
+        if (!Log.isLoggable(TAG, Log.DEBUG)) return
+        segments.forEach { segment ->
+            Log.d(
+                TAG,
+                "segment ${segment.startMs}..${segment.endMs} " +
+                    "speaker=${segment.speakerId ?: "unknown"}: ${segment.text.take(48)}",
             )
         }
+    }
+
+    private companion object {
+        const val TAG = "TranscribePipeline"
+        const val VAD_BLOCK_SAMPLES = 16_384
+        const val DIARIZATION_BLOCK_SAMPLES = 16_384
+    }
 }

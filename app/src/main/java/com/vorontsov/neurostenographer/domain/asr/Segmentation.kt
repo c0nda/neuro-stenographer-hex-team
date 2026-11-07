@@ -103,8 +103,14 @@ class ChunkPlanner(
 }
 
 /**
- * Groups adjacent words into utterances using pauses and length limits. No
- * timestamps are generated here; every boundary comes from a model token.
+ * Groups adjacent words into utterances using pauses, length limits and —
+ * when [speakerOf] is provided — speaker changes. No timestamps are
+ * generated here; every boundary comes from a model token or from the
+ * caller-supplied speaker identity.
+ *
+ * A speaker change ALWAYS starts a new utterance, so a transcript segment
+ * can never mix speakers. `null` (unknown) is its own identity: unknown
+ * words are never silently glued to a neighbouring speaker.
  */
 object AsrSegmenter {
 
@@ -113,6 +119,7 @@ object AsrSegmenter {
         maxPauseMs: Long = 700,
         maxUtteranceMs: Long = 15_000,
         maxCharacters: Int = 240,
+        speakerOf: (AsrWord) -> String? = { null },
     ): List<AsrUtterance> {
         val cleaned = words
             .filter { it.text.isNotBlank() }
@@ -148,7 +155,13 @@ object AsrSegmenter {
                 val gap = word.startMs - previous.endMs
                 val duration = word.endMs - current.first().startMs
                 val characters = current.sumOf { it.text.length + 1 } + word.text.length
-                if (gap > maxPauseMs || duration > maxUtteranceMs || characters > maxCharacters) {
+                val speakerChanged = speakerOf(word) != speakerOf(previous)
+                if (
+                    gap > maxPauseMs ||
+                    duration > maxUtteranceMs ||
+                    characters > maxCharacters ||
+                    speakerChanged
+                ) {
                     flush()
                 }
             }

@@ -51,6 +51,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    testOptions {
+        // android.util.Log calls in the pipeline diagnostics become no-ops
+        // (isLoggable returns false) under the local unit-test JVM.
+        unitTests.isReturnDefaultValues = true
+    }
     buildFeatures {
         compose = true
     }

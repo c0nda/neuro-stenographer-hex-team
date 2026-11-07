@@ -210,6 +210,57 @@ class TranscribeRecordingUseCaseTest {
         assertEquals(RecordingStatus.READY, recordings.status)
     }
 
+    @Test
+    fun `speaker change inside one former utterance splits the transcript at word boundary`() = runTest {
+        val sampleRate = 16_000
+        val source = FakeAudioSource(sampleRate, FloatArray(sampleRate * 3))
+        val recordings = FakeRecordingRepository()
+        val transcripts = FakeTranscriptRepository()
+        // Every chunk produces two words with NO pause between them; without
+        // word-level speakers both chunks would be single-speaker.
+        val engine = FakeEngine(
+            listOf(
+                AsrWord("привет", 0, 40, 0.9f),
+                AsrWord("как", 50, 90, 0.8f),
+            ),
+        )
+        val diarizationFactory = FakeDiarizationEngineFactory(
+            FakeDiarizationEngine(
+                listOf(
+                    DiarizationTurn(0, 1_000, clusterIndex = 0, confidence = null),
+                    DiarizationTurn(1_001, 3_000, clusterIndex = 9, confidence = null),
+                ),
+            ),
+        )
+        val useCase = useCase(
+            recordings = recordings,
+            transcripts = transcripts,
+            engineFactory = FakeEngineFactory(engine),
+            source = source,
+            planner = ChunkPlanner(minChunkMs = 1_000, maxChunkMs = 2_000),
+            scheduler = testScheduler,
+            diarizationEngineFactory = diarizationFactory,
+        )
+
+        useCase.execute(RECORDING_ID) { _, _ -> }
+
+        // Two words per chunk x two chunks = four words; the speaker boundary
+        // lies between the chunks, so each side forms one segment.
+        assertEquals(2, transcripts.segments.size)
+        assertEquals("speaker_1", transcripts.segments[0].speakerId)
+        assertEquals("speaker_2", transcripts.segments[1].speakerId)
+        assertEquals(2, transcripts.segments[0].words.size)
+        assertEquals(2, transcripts.segments[1].words.size)
+        // Global timeline: the second segment starts at the second chunk's
+        // offset, not at a chunk-relative zero.
+        assertEquals(0L, transcripts.segments[0].startMs)
+        assertTrue(transcripts.segments[1].startMs > 900L)
+        val json = transcripts.json()
+        assertTrue(json.contains("\"speaker_id\":\"speaker_1\""))
+        assertTrue(json.contains("\"speaker_id\":\"speaker_2\""))
+        assertTrue(TranscriptJson.validate(transcripts.segments).isEmpty())
+    }
+
     private fun useCase(
         recordings: RecordingRepository,
         transcripts: TranscriptRepository,
@@ -234,9 +285,10 @@ class TranscribeRecordingUseCaseTest {
         cpuDispatcher = UnconfinedTestDispatcher(scheduler),
     )
 
-    private class FakeEngine : AsrEngine {
-        override fun transcribe(samples: FloatArray, sampleRate: Int): List<AsrWord> =
-            listOf(AsrWord("тест", 0, 40, 0.9f))
+    private class FakeEngine(
+        private val words: List<AsrWord> = listOf(AsrWord("тест", 0, 40, 0.9f)),
+    ) : AsrEngine {
+        override fun transcribe(samples: FloatArray, sampleRate: Int): List<AsrWord> = words
 
         override fun close() = Unit
     }
