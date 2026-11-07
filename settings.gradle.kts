@@ -17,12 +17,6 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        // In-project repository hosting the vendored sherpa-onnx AAR (see
-        // local-repo/README note in app/build.gradle.kts).
-        maven {
-            name = "localVendored"
-            url = uri("./local-repo")
-        }
         google()
         mavenCentral()
     }

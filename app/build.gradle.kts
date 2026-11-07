@@ -205,7 +205,11 @@ dependencies {
     // settings.gradle.kts) and consumed as a normal coordinate. A plain
     // files("*.aar") dependency hits the AGP "Null extracted folder" bug in
     // Android Studio. See docs/PHASE4B_DIARIZATION.md.
-    implementation("com.k2-fsa:sherpa-onnx:2.0.1")
+    // Consumed as a committed vendored file: a bare maven coordinate made
+    // some AGP tasks probe for a nonexistent sherpa-onnx-2.0.1.jar, and the
+    // file dependency only failed earlier because the root .gitignore
+    // ignored *.aar so the file never reached the repository (fixed).
+    implementation(files("libs/sherpa-onnx-2.0.1.aar"))
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
