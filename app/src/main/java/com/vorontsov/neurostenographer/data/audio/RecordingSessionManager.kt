@@ -113,6 +113,15 @@ class RecordingSessionManager @Inject constructor(
         }
     }
 
+    /**
+     * Registers the real-time pipeline PCM tap. Pass null to detach. The
+     * listener runs on the audio capture thread with a reused buffer — it
+     * must copy synchronously and never block.
+     */
+    fun setPcmBlockListener(listener: ((ShortArray, Int) -> Unit)?) {
+        recorder.onPcmBlock = listener
+    }
+
     suspend fun pause() = mutex.withLock {
         if (_state.value.status != CaptureStatus.RECORDING) return@withLock
         withContext(ioDispatcher) {

@@ -10,7 +10,7 @@ import com.vorontsov.neurostenographer.data.transcription.StartResult
 import com.vorontsov.neurostenographer.data.transcription.TranscriptionManager
 import com.vorontsov.neurostenographer.data.transcription.TranscriptionState
 import com.vorontsov.neurostenographer.domain.asr.AsrModelRepository
-import com.vorontsov.neurostenographer.domain.asr.AsrModelStatus
+import com.vorontsov.neurostenographer.domain.model.ModelStatus
 import com.vorontsov.neurostenographer.domain.model.PlaybackState
 import com.vorontsov.neurostenographer.domain.model.Recording
 import com.vorontsov.neurostenographer.domain.model.Speaker
@@ -92,7 +92,7 @@ class TranscriptViewModel @Inject constructor(
             initialValue = TranscriptionState.Idle,
         )
 
-    val modelStatus: StateFlow<AsrModelStatus> = modelRepository.status
+    val modelStatus: StateFlow<ModelStatus> = modelRepository.status
 
     init {
         viewModelScope.launch { modelRepository.refresh() }

@@ -1,6 +1,6 @@
 package com.vorontsov.neurostenographer.domain.asr
 
-import java.io.InputStream
+import com.vorontsov.neurostenographer.domain.model.ModelRepository
 
 /**
  * A single recognized word with a model-derived timestamp. Timestamps are
@@ -52,6 +52,15 @@ interface AsrEngineFactory {
      * when no verified model is installed.
      */
     suspend fun getOrCreate(): AsrEngine
+
+    /**
+     * Closes the cached engine and releases its native session. The next
+     * [getOrCreate] reloads the model. Heavy models (ASR) are normally kept
+     * resident for the process lifetime; this exists so a competing heavy
+     * model (e.g. diarization) can force a sequential lifecycle and cap peak
+     * RAM. Default is a no-op for engines that hold no heavy resources.
+     */
+    suspend fun release() = Unit
 }
 
 /** Random-access, mono float PCM source used by the chunked offline pipeline. */
@@ -81,42 +90,9 @@ class AsrModelUnavailableException(message: String, cause: Throwable? = null) :
 
 class UnsupportedAudioFormatException(message: String) : IllegalArgumentException(message)
 
-/** Lifecycle of the manually provisioned ASR model. */
-enum class AsrModelState {
-    NOT_INSTALLED,
-    VERIFYING,
-    IMPORTING,
-    READY,
-    INVALID,
-    ERROR,
-}
-
-data class AsrModelStatus(
-    val state: AsrModelState = AsrModelState.NOT_INSTALLED,
-    val progress: Float = 0f,
-    val sizeBytes: Long? = null,
-    val message: String? = null,
-) {
-    val isReady: Boolean get() = state == AsrModelState.READY
-    val isBusy: Boolean get() = state == AsrModelState.VERIFYING || state == AsrModelState.IMPORTING
-}
-
 /**
- * Manages the model file that is imported by the user. The app never downloads
- * it, so the runtime remains fully offline.
+ * Manages the ASR model file that is imported by the user. The app never
+ * downloads it, so the runtime remains fully offline. Provisioning semantics
+ * are shared with every other model via [ModelRepository].
  */
-interface AsrModelRepository {
-    val status: kotlinx.coroutines.flow.StateFlow<AsrModelStatus>
-
-    /** Re-checks the installed model size and SHA-256. */
-    suspend fun refresh()
-
-    /**
-     * Streams a user-selected model into private storage, verifying its size and
-     * SHA-256 before it becomes visible. [open] is invoked on a background
-     * thread and must return a fresh stream.
-     */
-    suspend fun importModel(open: () -> InputStream): Result<Unit>
-
-    suspend fun deleteModel()
-}
+interface AsrModelRepository : ModelRepository

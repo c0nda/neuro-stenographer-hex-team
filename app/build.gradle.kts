@@ -19,6 +19,14 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // x86 is excluded: the sherpa-onnx static-link AAR ships a dynamically
+        // linked x86 build that would collide with onnxruntime-android's
+        // libonnxruntime.so, and modern emulators are x86_64 anyway. Physical
+        // devices (arm64-v8a, armeabi-v7a) are unaffected.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -38,6 +46,15 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            // Only the x86 sherpa-onnx build links ONNX Runtime dynamically and
+            // would collide with onnxruntime-android's copy at merge time; all
+            // other ABIs link it statically inside libsherpa-onnx-jni.so. x86
+            // is 32-bit emulator-only (devices are arm64-v8a/armeabi-v7a,
+            // modern emulators x86_64), so picking the app-bundled ORT there
+            // is an acceptable, documented trade-off.
+            pickFirsts += "**/libonnxruntime.so"
         }
     }
 }
@@ -76,6 +93,13 @@ dependencies {
 
     implementation(libs.onnxruntime.android)
     implementation(libs.jtransforms)
+
+    // sherpa-onnx is not published to Maven Central for Android; the official
+    // prebuilt AAR (static-link-onnxruntime variant, SHA-256
+    // 07e042d97f3a6bd5b7fe74d4eef0513dc01a714b16c15a903250095aba43a575)
+    // from https://github.com/k2-fsa/sherpa-onnx/releases (v2.0.1, Apache-2.0)
+    // is vendored. See docs/PHASE4B_DIARIZATION.md.
+    implementation(files("libs/sherpa-onnx-2.0.1.aar"))
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

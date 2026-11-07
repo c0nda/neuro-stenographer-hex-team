@@ -25,6 +25,19 @@
     <string name="home_model_verification_note">Only v3_ctc.int8.onnx (224,721,181 bytes) is accepted. The app never downloads it.</string>
     <string name="home_model_imported">Model imported and verified</string>
     <string name="home_model_import_failed">Model import failed: %1$s</string>
+    <string name="home_vad_model_title">Voice activity detection model</string>
+    <string name="home_vad_model_not_installed">Optional: the Silero VAD model skips silence before recognition. Without it the energy-based chunker is used.</string>
+    <string name="home_vad_model_verification_note">Only silero_vad.onnx (2,327,524 bytes) is accepted. The app never downloads it.</string>
+    <string name="home_vad_model_imported">VAD model imported and verified</string>
+    <string name="home_vad_model_import_failed">VAD model import failed: %1$s</string>
+    <string name="home_diarization_title">Speaker diarization models</string>
+    <string name="home_diarization_not_installed">Optional: two models that assign speaker_1, speaker_2, … to transcript segments. Without them every speaker stays "unknown".</string>
+    <string name="home_diarization_import_segmentation">Import segmentation model</string>
+    <string name="home_diarization_import_embedding">Import embedding model</string>
+    <string name="home_diarization_segmentation_imported">Segmentation model imported and verified</string>
+    <string name="home_diarization_embedding_imported">Embedding model imported and verified</string>
+    <string name="home_diarization_import_failed">Diarization model import failed: %1$s</string>
+    <string name="home_diarization_verification_note">Only model.int8.onnx (pyannote segmentation 3.0, 1,540,506 bytes) and 3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx (29,596,978 bytes) are accepted. The app never downloads them.</string>
 
     <string name="recording_title">Recording</string>
     <string name="recording_ready">Ready to record</string>
@@ -37,7 +50,11 @@
     <string name="recording_paused">Paused</string>
     <string name="recording_active">Recording</string>
     <string name="recording_live_transcript">Live transcript</string>
-    <string name="recording_live_placeholder">Live recognition is not available in this build. Audio is recorded locally and transcribed offline after you stop.</string>
+    <string name="recording_live_unavailable">Not available: the speech recognition model is not installed. Import it on the Home screen; recording itself is unaffected.</string>
+    <string name="recording_live_waiting">Listening… speech will appear here as it is recognized.</string>
+    <string name="recording_live_segment_time">%1$s – %2$s</string>
+    <string name="recording_live_catching_up">Recognition is catching up (queued regions: %1$d)…</string>
+    <string name="recording_live_provisional_note">Provisional preview — run offline transcription afterwards for the final transcript, speakers and timestamps.</string>
     <string name="recording_current_speaker">Current speaker</string>
     <string name="recording_current_speaker_placeholder">Not determined — diarization is not integrated yet.</string>
     <string name="recording_permission_title">Microphone access is required</string>
@@ -71,6 +88,8 @@
     </plurals>
     <string name="transcript_provisional_hint">Timing is provisional and may still change.</string>
     <string name="transcript_alignment_estimated">Estimated timing</string>
+    <string name="transcript_show_words">Word timestamps</string>
+    <string name="transcript_hide_words">Hide words</string>
     <string name="transcript_alignment_verified">Verified timing</string>
     <string name="transcript_playback_hint">Tap a segment to play from that point.</string>
     <string name="transcript_recognition">On-device recognition</string>
@@ -88,6 +107,8 @@
     <string name="transcript_transcription_completed">Transcription finished · %1$d segments</string>
     <string name="transcript_stage_queued">Queued…</string>
     <string name="transcript_stage_preparing">Preparing the model…</string>
+    <string name="transcript_stage_detecting_speech">Detecting speech…</string>
+    <string name="transcript_stage_diarizing">Identifying speakers…</string>
     <string name="transcript_stage_recognizing">Recognizing Russian speech…</string>
     <string name="transcript_stage_saving">Saving the transcript…</string>
     <string name="transcript_asr_note">GigaAM v3 CTC · 40 ms model-derived word timing. Speaker diarization is not integrated yet, so every segment is reported as “unknown”.</string>
@@ -99,7 +120,11 @@
     <string name="speakers_name_hint">Display name</string>
     <string name="speakers_save">Save</string>
     <string name="speakers_cancel">Cancel</string>
-    <string name="speakers_merge_note">Merging and splitting speakers will be enabled together with diarization.</string>
+    <string name="speakers_merge_note">To fix a wrong assignment, merge one speaker into another; all of its segments are reassigned. Splitting a merged speaker is not supported yet.</string>
+    <string name="speakers_merge">Merge into…</string>
+    <string name="speakers_merge_title">Merge %1$s into</string>
+    <string name="speakers_merged">Speakers merged</string>
+    <string name="speakers_merge_failed">Could not merge speakers</string>
     <string name="speakers_unnamed">Unnamed speaker</string>
     <string name="speakers_numbered">Speaker %1$s</string>
     <string name="speakers_renamed">Speaker renamed</string>

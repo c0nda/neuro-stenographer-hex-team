@@ -33,6 +33,15 @@ class AudioRecorder @Inject constructor() {
     @Volatile
     var onError: ((Throwable) -> Unit)? = null
 
+    /**
+     * Tap for the real-time pipeline: receives every captured PCM16 block
+     * right after it is written to disk. Called on the audio capture thread
+     * with a REUSED buffer — consumers must copy synchronously and must not
+     * run heavy work here.
+     */
+    @Volatile
+    var onPcmBlock: ((ShortArray, Int) -> Unit)? = null
+
     val isRunning: Boolean get() = running
 
     fun start(file: File) {
@@ -124,6 +133,7 @@ class AudioRecorder @Inject constructor() {
                 if (read > 0) {
                     wav?.write(samples, read)
                     onAmplitude?.invoke(calculateAmplitude(samples, read))
+                    onPcmBlock?.invoke(samples, read)
                 } else if (read < 0 && running) {
                     // Error codes are expected after stop()/pause() races; re-check state.
                     Thread.sleep(ERROR_POLL_MS)
