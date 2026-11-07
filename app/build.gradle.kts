@@ -83,7 +83,7 @@ ksp {
 // Forward the desktop verification harness properties (-Dgigaam.*) into the
 // unit-test JVM; Gradle does not propagate arbitrary -D system properties.
 tasks.withType<Test>().configureEach {
-    listOf("gigaam.model", "gigaam.clip", "gigaam.reference").forEach { key ->
+    listOf("gigaam.model", "gigaam.clip", "gigaam.reference", "punct.model").forEach { key ->
         providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
     }
 }
@@ -127,6 +127,17 @@ tasks.register("downloadBundledModels") {
             assetPath = "models/diarization-embedding/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx",
             expectedSize = 29_596_978L,
             sha256 = "357a834f702b80161e5b981182c038e18553c1f2ca752ed6cec2052365d4129b",
+        ),
+        // Horizon-Labs Punctuation Restoration Small, INT8 ONNX
+        // (Apache-2.0, https://huggingface.co/Horizon-Labs/punctuation-restoration-small).
+        // The matching tokenizer assets (vocab.txt, merges.txt) are extracted
+        // from the repository's tokenizer.json and committed under the same
+        // assets directory.
+        ModelSpec(
+            url = "https://huggingface.co/Horizon-Labs/punctuation-restoration-small/resolve/main/onnx/model_quantized.onnx",
+            assetPath = "models/punctuation/model_quantized.onnx",
+            expectedSize = 268_414_381L,
+            sha256 = "5679870be92c7fa47c9be9b2872fac389ef28d43d2c33f35e1315b93a82f4ace",
         ),
     )
 

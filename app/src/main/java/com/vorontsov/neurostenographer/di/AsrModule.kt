@@ -9,6 +9,7 @@ import com.vorontsov.neurostenographer.domain.asr.AsrModelRepository
 import com.vorontsov.neurostenographer.domain.asr.AudioSourceFactory
 import com.vorontsov.neurostenographer.domain.asr.ChunkPlanner
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationEngineFactory
+import com.vorontsov.neurostenographer.domain.punctuation.PunctuationRestorer
 import com.vorontsov.neurostenographer.domain.transcription.TranscribeRecordingUseCase
 import com.vorontsov.neurostenographer.domain.vad.VadEngineFactory
 import com.vorontsov.neurostenographer.domain.vad.VadSpeechPlanner
@@ -58,6 +59,7 @@ object AsrModule {
         vadSpeechPlanner: VadSpeechPlanner,
         diarizationEngineFactory: DiarizationEngineFactory,
         settingsRepository: com.vorontsov.neurostenographer.domain.repository.SettingsRepository,
+        punctuationRestorer: PunctuationRestorer,
         @IoDispatcher ioDispatcher: CoroutineDispatcher,
         @DefaultDispatcher cpuDispatcher: CoroutineDispatcher,
     ): TranscribeRecordingUseCase = TranscribeRecordingUseCase(
@@ -72,6 +74,7 @@ object AsrModule {
         ioDispatcher = ioDispatcher,
         cpuDispatcher = cpuDispatcher,
         settingsRepository = settingsRepository,
+        punctuationRestorer = punctuationRestorer,
     )
 
     @Provides

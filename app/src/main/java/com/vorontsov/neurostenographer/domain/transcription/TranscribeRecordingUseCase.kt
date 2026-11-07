@@ -14,6 +14,8 @@ import com.vorontsov.neurostenographer.domain.diarization.DiarizationEngineFacto
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationTurn
 import com.vorontsov.neurostenographer.domain.diarization.WordSpeakerAssigner
 import com.vorontsov.neurostenographer.domain.model.AlignmentSource
+import com.vorontsov.neurostenographer.domain.punctuation.PunctuationPostProcessor
+import com.vorontsov.neurostenographer.domain.punctuation.PunctuationRestorer
 import com.vorontsov.neurostenographer.domain.model.AppSettings
 import com.vorontsov.neurostenographer.domain.model.RecordingStatus
 import com.vorontsov.neurostenographer.domain.model.TranscriptSegment
@@ -71,6 +73,7 @@ class TranscribeRecordingUseCase(
     private val ioDispatcher: CoroutineDispatcher,
     private val cpuDispatcher: CoroutineDispatcher,
     private val settingsRepository: SettingsRepository? = null,
+    private val punctuationRestorer: PunctuationRestorer? = null,
 ) {
 
     suspend fun execute(
@@ -150,18 +153,24 @@ class TranscribeRecordingUseCase(
                     }
                 }
 
-                // 4-5. Word-level speaker assignment, then speaker-aware
-                // segmentation: a segment can never mix speakers.
+                // 4. Word-level speaker assignment.
                 val assigned = if (turns.isEmpty()) {
                     globalWords.map { WordSpeakerAssigner.AssignedWord(it, null) }
                 } else {
                     WordSpeakerAssigner.assign(globalWords, turns)
                 }
-                val speakerByWord = assigned.associate { it.word to it.speakerId }
                 logAssignment(globalWords, turns, assigned)
 
+                // 5. Punctuation restoration per consecutive same-speaker
+                // group (words of different speakers never share a window),
+                // then the separate capitalization post-processing step.
+                val punctuated = restorePunctuation(assigned)
+
+                // 6. Speaker-aware segmentation: a segment can never mix
+                // speakers.
+                val speakerByWord = punctuated.associate { it.word to it.speakerId }
                 val finalSegments = AsrSegmenter.segment(
-                    assigned.map { it.word },
+                    punctuated.map { it.word },
                     maxPauseMs = maxPauseMs,
                     speakerOf = { speakerByWord[it] },
                 ).map { utterance -> toSegment(utterance, speakerByWord[utterance.words.first()]) }
@@ -291,6 +300,43 @@ class TranscribeRecordingUseCase(
                 )
             },
         )
+
+    /**
+     * Restores punctuation independently for every run of consecutive words
+     * with the same speaker id (speaker boundaries are explicit to the
+     * model), then capitalizes sentence starts. Falls back to the original
+     * words when the model is unavailable or fails — punctuation is never
+     * fabricated.
+     */
+    private suspend fun restorePunctuation(
+        assigned: List<WordSpeakerAssigner.AssignedWord>,
+    ): List<WordSpeakerAssigner.AssignedWord> {
+        val restorer = punctuationRestorer?.takeIf { it.isAvailable } ?: return assigned
+        val restored = ArrayList<WordSpeakerAssigner.AssignedWord>(assigned.size)
+        var index = 0
+        while (index < assigned.size) {
+            coroutineContext.ensureActive()
+            val speaker = assigned[index].speakerId
+            var end = index
+            while (end < assigned.size && assigned[end].speakerId == speaker) end++
+            val group = assigned.subList(index, end).map { it.word }
+            val withMarks = try {
+                restorer.restore(group)
+            } catch (throwable: Throwable) {
+                Log.w(TAG, "Punctuation restoration failed; continuing without it", throwable)
+                group
+            }
+            if (withMarks.size != group.size) {
+                Log.w(TAG, "Punctuation restorer changed the word count; ignoring its output")
+                restored.addAll(group.map { WordSpeakerAssigner.AssignedWord(it, speaker) })
+            } else {
+                restored.addAll(withMarks.map { WordSpeakerAssigner.AssignedWord(it, speaker) })
+            }
+            index = end
+        }
+        return PunctuationPostProcessor.capitalizeSentenceStarts(restored.map { it.word })
+            .mapIndexed { wordIndex, word -> WordSpeakerAssigner.AssignedWord(word, restored[wordIndex].speakerId) }
+    }
 
     // Debug diagnostics for the word-level pipeline. Guarded by isLoggable so
     // production builds stay quiet; Log is used pragmatically here (single

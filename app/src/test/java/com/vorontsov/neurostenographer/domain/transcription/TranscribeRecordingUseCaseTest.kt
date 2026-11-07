@@ -12,6 +12,7 @@ import com.vorontsov.neurostenographer.domain.diarization.DiarizationEngine
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationEngineFactory
 import com.vorontsov.neurostenographer.domain.diarization.DiarizationTurn
 import com.vorontsov.neurostenographer.domain.model.AlignmentSource
+import com.vorontsov.neurostenographer.domain.punctuation.PunctuationRestorer
 import com.vorontsov.neurostenographer.domain.model.Recording
 import com.vorontsov.neurostenographer.domain.model.RecordingSource
 import com.vorontsov.neurostenographer.domain.model.RecordingStatus
@@ -261,6 +262,73 @@ class TranscribeRecordingUseCaseTest {
         assertTrue(TranscriptJson.validate(transcripts.segments).isEmpty())
     }
 
+    @Test
+    fun `punctuation restoration runs per speaker group and preserves speakers and timestamps`() = runTest {
+        val sampleRate = 16_000
+        val source = FakeAudioSource(sampleRate, FloatArray(sampleRate * 3))
+        val recordings = FakeRecordingRepository()
+        val transcripts = FakeTranscriptRepository()
+        val restorer = FakePunctuationRestorer()
+        val useCase = useCase(
+            recordings = recordings,
+            transcripts = transcripts,
+            engineFactory = FakeEngineFactory(FakeEngine()),
+            source = source,
+            planner = ChunkPlanner(minChunkMs = 1_000, maxChunkMs = 2_000),
+            scheduler = testScheduler,
+            diarizationEngineFactory = FakeDiarizationEngineFactory(
+                FakeDiarizationEngine(
+                    listOf(
+                        DiarizationTurn(0, 1_000, clusterIndex = 0, confidence = null),
+                        DiarizationTurn(1_001, 3_000, clusterIndex = 9, confidence = null),
+                    ),
+                ),
+            ),
+            punctuationRestorer = restorer,
+        )
+
+        useCase.execute(RECORDING_ID) { _, _ -> }
+
+        // The restorer must have been called once per consecutive
+        // same-speaker group - never across a speaker boundary.
+        assertEquals(2, restorer.groups.size)
+        assertEquals(listOf("тест"), restorer.groups[0])
+        assertEquals(listOf("тест"), restorer.groups[1])
+
+        // Speakers preserved; the last word of each group got its mark and
+        // the sentence start was capitalized; timestamps untouched.
+        assertEquals("speaker_1", transcripts.segments[0].speakerId)
+        assertEquals("speaker_2", transcripts.segments[1].speakerId)
+        assertEquals("Тест.", transcripts.segments[0].text)
+        assertEquals("Тест.", transcripts.segments[1].text)
+        assertEquals(40L, transcripts.segments[0].endMs)
+        assertTrue(transcripts.segments[1].startMs > 900L)
+    }
+
+    @Test
+    fun `punctuation failure falls back to original words without fabricating marks`() = runTest {
+        val sampleRate = 16_000
+        val recordings = FakeRecordingRepository()
+        val transcripts = FakeTranscriptRepository()
+        val restorer = FakePunctuationRestorer().apply { fail = true }
+        val useCase = useCase(
+            recordings = recordings,
+            transcripts = transcripts,
+            engineFactory = FakeEngineFactory(FakeEngine()),
+            source = FakeAudioSource(sampleRate, FloatArray(sampleRate * 2)),
+            planner = ChunkPlanner(minChunkMs = 1_000, maxChunkMs = 2_000),
+            scheduler = testScheduler,
+            punctuationRestorer = restorer,
+        )
+
+        useCase.execute(RECORDING_ID) { _, _ -> }
+
+        // Failure path: original words, but the capitalization step (which
+        // is independent of the model) still runs honestly.
+        assertEquals("Тест", transcripts.segments[0].text)
+        assertEquals(RecordingStatus.READY, recordings.status)
+    }
+
     private fun useCase(
         recordings: RecordingRepository,
         transcripts: TranscriptRepository,
@@ -270,6 +338,7 @@ class TranscribeRecordingUseCaseTest {
         scheduler: TestCoroutineScheduler,
         vadEngineFactory: VadEngineFactory? = null,
         diarizationEngineFactory: DiarizationEngineFactory? = null,
+        punctuationRestorer: PunctuationRestorer? = null,
     ): TranscribeRecordingUseCase = TranscribeRecordingUseCase(
         recordingRepository = recordings,
         transcriptRepository = transcripts,
@@ -283,6 +352,7 @@ class TranscribeRecordingUseCaseTest {
         diarizationEngineFactory = diarizationEngineFactory,
         ioDispatcher = UnconfinedTestDispatcher(scheduler),
         cpuDispatcher = UnconfinedTestDispatcher(scheduler),
+        punctuationRestorer = punctuationRestorer,
     )
 
     private class FakeEngine(
@@ -321,6 +391,24 @@ class TranscribeRecordingUseCaseTest {
         override suspend fun getOrCreate(): VadEngine = checkNotNull(engine)
 
         override suspend fun release() = Unit
+    }
+
+    /** Records the groups it receives and appends a period to each group's last word. */
+    private class FakePunctuationRestorer : PunctuationRestorer {
+        val groups = mutableListOf<List<String>>()
+        var fail = false
+
+        override val isAvailable: Boolean = true
+
+        override fun close() = Unit
+
+        override suspend fun restore(words: List<AsrWord>): List<AsrWord> {
+            if (fail) throw IllegalStateException("boom")
+            groups += words.map { it.text }
+            return words.mapIndexed { index, word ->
+                if (index == words.lastIndex) word.copy(text = word.text + ".") else word
+            }
+        }
     }
 
     /** Diarization engine that reports fixed turns regardless of input. */
